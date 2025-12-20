@@ -18,11 +18,66 @@
       <div class="readme-section card">
         <h3>任务说明</h3>
         <div v-if="taskInfo.frontmatter" class="frontmatter">
-          <div v-if="taskInfo.frontmatter.status" class="meta-item">
+          <div class="meta-item">
             <strong>状态：</strong>
-            <span :class="`status-badge status-${taskInfo.frontmatter.status}`">
-              {{ taskInfo.frontmatter.status }}
-            </span>
+            <div v-if="!editingStatus" class="status-display">
+              <span 
+                :class="`status-badge status-${taskInfo.frontmatter.status || 'pending'}`"
+                @click="startEditStatus"
+                style="cursor: pointer;"
+                title="点击编辑状态"
+              >
+                {{ taskInfo.frontmatter.status || '待处理' }}
+              </span>
+              <button 
+                class="btn-edit-status" 
+                @click="startEditStatus"
+                title="编辑状态"
+              >
+                ✏️
+              </button>
+            </div>
+            <div v-else class="status-edit">
+              <div class="status-input-group">
+                <input 
+                  v-model="editingStatusText"
+                  type="text"
+                  class="status-input"
+                  placeholder="输入状态..."
+                  @keydown.enter="saveStatus"
+                  @keydown.esc="cancelEditStatus"
+                  ref="statusInput"
+                />
+                <button 
+                  class="btn-dropdown" 
+                  @click="toggleStatusDropdown"
+                  title="选择已有状态"
+                  type="button"
+                >
+                  ▼
+                </button>
+              </div>
+              <div v-if="showStatusDropdown && projectStatuses.length > 0" class="status-dropdown">
+                <div 
+                  v-for="status in projectStatuses" 
+                  :key="status"
+                  class="status-option"
+                  @click="selectStatus(status)"
+                >
+                  <span :class="`status-badge status-${status}`">
+                    {{ status }}
+                  </span>
+                </div>
+              </div>
+              <div class="status-actions">
+                <button class="btn btn-sm btn-primary" @click="saveStatus">
+                  保存
+                </button>
+                <button class="btn btn-sm btn-secondary" @click="cancelEditStatus">
+                  取消
+                </button>
+              </div>
+            </div>
           </div>
           <div v-if="taskInfo.frontmatter.prompt" class="meta-item">
             <strong>AI提示词：</strong>
@@ -190,7 +245,11 @@ export default {
       uploadProgress: 0,
       uploadId: null,
       editingDescription: null, // 正在编辑描述的文件名
-      editingDescriptionText: '' // 编辑中的描述文本
+      editingDescriptionText: '', // 编辑中的描述文本
+      editingStatus: false, // 是否正在编辑状态
+      editingStatusText: '', // 编辑中的状态文本
+      projectStatuses: [], // 项目中已使用的所有状态
+      showStatusDropdown: false // 是否显示状态下拉列表
     }
   },
   computed: {
@@ -200,6 +259,12 @@ export default {
   },
   async mounted() {
     await this.loadTaskDetail()
+    // 添加全局点击事件监听，用于关闭下拉列表
+    document.addEventListener('click', this.handleClickOutside)
+  },
+  beforeUnmount() {
+    // 移除全局点击事件监听
+    document.removeEventListener('click', this.handleClickOutside)
   },
   watch: {
     taskName: {
@@ -219,10 +284,86 @@ export default {
         const filesResponse = await axios.get(`/api/tasks/${this.projectName}/${this.taskName}/files`)
         this.psdFiles = filesResponse.data
         
+        // 加载项目中所有已使用的状态
+        await this.loadProjectStatuses()
+        
       } catch (error) {
         console.error('Failed to load task detail:', error)
       } finally {
         this.loading = false
+      }
+    },
+    
+    async loadProjectStatuses() {
+      try {
+        const response = await axios.get(`/api/tasks/${this.projectName}/statuses/list`)
+        this.projectStatuses = response.data
+      } catch (error) {
+        console.error('Failed to load project statuses:', error)
+        this.projectStatuses = []
+      }
+    },
+    
+    startEditStatus() {
+      this.editingStatus = true
+      this.editingStatusText = this.taskInfo.frontmatter?.status || ''
+      this.showStatusDropdown = false
+      // 等待DOM更新后聚焦输入框
+      this.$nextTick(() => {
+        if (this.$refs.statusInput) {
+          this.$refs.statusInput.focus()
+        }
+      })
+    },
+    
+    cancelEditStatus() {
+      this.editingStatus = false
+      this.editingStatusText = ''
+      this.showStatusDropdown = false
+    },
+    
+    selectStatus(status) {
+      this.editingStatusText = status
+      this.showStatusDropdown = false
+    },
+    
+    toggleStatusDropdown() {
+      this.showStatusDropdown = !this.showStatusDropdown
+    },
+    
+    handleClickOutside(event) {
+      // 如果点击在状态编辑区域外，关闭下拉列表
+      const statusEdit = this.$el?.querySelector('.status-edit')
+      if (statusEdit && !statusEdit.contains(event.target)) {
+        this.showStatusDropdown = false
+      }
+    },
+    
+    async saveStatus() {
+      if (!this.editingStatusText.trim()) {
+        alert('状态不能为空')
+        return
+      }
+      
+      try {
+        await axios.put(
+          `/api/tasks/${this.projectName}/${this.taskName}/status`,
+          { status: this.editingStatusText.trim() }
+        )
+        
+        // 更新本地数据
+        if (!this.taskInfo.frontmatter) {
+          this.taskInfo.frontmatter = {}
+        }
+        this.taskInfo.frontmatter.status = this.editingStatusText.trim()
+        
+        // 重新加载项目状态列表
+        await this.loadProjectStatuses()
+        
+        this.cancelEditStatus()
+      } catch (error) {
+        console.error('保存状态失败:', error)
+        alert('保存状态失败：' + (error.response?.data?.error || error.message))
       }
     },
     
@@ -628,6 +769,140 @@ export default {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
+}
+
+/* 状态编辑样式 */
+.status-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: inline-block;
+  transition: opacity 0.2s;
+}
+
+.status-display .status-badge:hover {
+  opacity: 0.8;
+}
+
+.status-pending {
+  background: #ffc107;
+  color: #856404;
+}
+
+.status-in-progress,
+.status-进行中 {
+  background: #17a2b8;
+  color: white;
+}
+
+.status-completed,
+.status-已完成 {
+  background: #28a745;
+  color: white;
+}
+
+.status-review,
+.status-审核中 {
+  background: #6f42c1;
+  color: white;
+}
+
+.status-blocked,
+.status-已阻塞 {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-edit-status {
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 0.8rem;
+  padding: 0.25rem;
+}
+
+.status-display:hover .btn-edit-status {
+  opacity: 1;
+}
+
+.status-edit {
+  display: inline-block;
+  min-width: 250px;
+  position: relative;
+}
+
+.status-input-group {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.status-input {
+  flex: 1;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.status-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.btn-dropdown {
+  padding: 0.375rem 0.5rem;
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  transition: background 0.2s;
+}
+
+.btn-dropdown:hover {
+  background: #e9ecef;
+}
+
+.status-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.status-option {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.status-option:hover {
+  background: #f8f9fa;
+}
+
+.status-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .btn-sm {

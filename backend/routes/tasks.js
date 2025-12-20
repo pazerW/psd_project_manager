@@ -213,6 +213,78 @@ router.put("/:projectName/:taskName/readme", async (req, res) => {
   }
 });
 
+// 更新任务状态
+router.put("/:projectName/:taskName/status", async (req, res) => {
+  try {
+    const { projectName, taskName } = req.params;
+    const { status } = req.body;
+
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const readmePath = path.join(taskPath, "README.md");
+
+    if (!(await fs.pathExists(taskPath))) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    // 读取现有README
+    let content = "";
+    let frontmatter = {};
+    
+    if (await fs.pathExists(readmePath)) {
+      const fileContent = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(fileContent);
+      content = parsed.content;
+      frontmatter = parsed.data;
+    }
+
+    // 更新status字段
+    frontmatter.status = status;
+
+    // 写回README文件
+    const fullContent = matter.stringify(content, frontmatter);
+    await fs.writeFile(readmePath, fullContent);
+
+    res.json({ success: true, status });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取项目中所有已使用的状态
+router.get("/:projectName/statuses/list", async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const projectPath = path.join(req.dataPath, projectName);
+
+    if (!(await fs.pathExists(projectPath))) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    const statusSet = new Set();
+    const items = await fs.readdir(projectPath, { withFileTypes: true });
+
+    for (const item of items) {
+      if (item.isDirectory() && !item.name.startsWith(".")) {
+        const taskPath = path.join(projectPath, item.name);
+        const readmePath = path.join(taskPath, "README.md");
+        
+        if (await fs.pathExists(readmePath)) {
+          const content = await fs.readFile(readmePath, "utf8");
+          const parsed = matter(content);
+          
+          if (parsed.data.status) {
+            statusSet.add(parsed.data.status);
+          }
+        }
+      }
+    }
+
+    res.json(Array.from(statusSet).sort());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 分析任务详情的辅助函数
 async function analyzeTaskDetails(taskPath, taskName, projectName) {
   let readmeContent = "";
