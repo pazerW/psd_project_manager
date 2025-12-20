@@ -21,7 +21,7 @@
           <div v-if="taskInfo.frontmatter.status" class="meta-item">
             <strong>状态：</strong>
             <span :class="`status-badge status-${taskInfo.frontmatter.status}`">
-              {{ getStatusText(taskInfo.frontmatter.status) }}
+              {{ taskInfo.frontmatter.status }}
             </span>
           </div>
           <div v-if="taskInfo.frontmatter.prompt" class="meta-item">
@@ -352,16 +352,6 @@ export default {
         addSuffix: true,
         locale: zhCN 
       })
-    },
-    
-    getStatusText(status) {
-      const statusMap = {
-        active: '进行中',
-        pending: '待开始',
-        completed: '已完成',
-        paused: '已暂停'
-      }
-      return statusMap[status] || '未知'
     },
 
     // PSD文件描述编辑相关方法

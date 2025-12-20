@@ -5,6 +5,75 @@ const matter = require("gray-matter");
 
 const router = express.Router();
 
+// 确保 README.md 存在的工具函数
+async function ensureReadme(dirPath, name, type = "project") {
+  const readmePath = path.join(dirPath, "README.md");
+
+  if (!(await fs.pathExists(readmePath))) {
+    const timestamp = new Date().toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    let content;
+    if (type === "project") {
+      content = `---
+title: ${name}
+created: ${timestamp}
+status: active
+---
+
+# ${name}
+
+## 项目信息
+
+- 创建时间: ${timestamp}
+- 状态: 进行中
+
+## 项目描述
+
+<!-- 在这里添加项目描述 -->
+
+## 任务列表
+
+<!-- 任务会自动列出 -->
+
+## 备注
+
+<!-- 其他备注信息 -->
+`;
+    } else {
+      content = `---
+title: ${name}
+created: ${timestamp}
+status: pending
+---
+
+# ${name}
+
+## 任务信息
+
+- 创建时间: ${timestamp}
+- 状态: 待处理
+
+## 设计文件说明
+
+<!-- 上传文件后，在这里添加说明 -->
+
+## 备注
+
+<!-- 其他备注信息 -->
+`;
+    }
+
+    await fs.writeFile(readmePath, content, "utf-8");
+    console.log(`Created README.md for ${type}: ${name}`);
+  }
+}
+
 // 获取所有项目列表
 router.get("/", async (req, res) => {
   try {
@@ -53,6 +122,9 @@ async function analyzeProject(projectPath, projectName) {
   let projectInfo = {}; // 移到函数顶部，确保在任何情况下都可用
 
   try {
+    // 确保项目 README.md 存在
+    await ensureReadme(projectPath, projectName, "project");
+
     const items = await fs.readdir(projectPath, { withFileTypes: true });
 
     // 检查是否有项目级别的README
@@ -96,6 +168,9 @@ async function analyzeTask(taskPath, taskName) {
   let taskInfo = {};
 
   try {
+    // 确保任务 README.md 存在
+    await ensureReadme(taskPath, taskName, "task");
+
     // 检查README.md
     const readmePath = path.join(taskPath, "README.md");
     if (await fs.pathExists(readmePath)) {

@@ -4,9 +4,27 @@
       <h2>{{ projectName }}</h2>
       <div v-if="projectInfo" class="project-meta">
         <span :class="`status-badge status-${projectInfo.status}`">
-          {{ getStatusText(projectInfo.status) }}
+          {{ projectInfo.status }}
         </span>
       </div>
+    </div>
+
+    <!-- 状态筛选器 -->
+    <div v-if="!loading" class="status-filter">
+      <button 
+        :class="['filter-btn', { active: selectedStatus === 'all' }]"
+        @click="selectedStatus = 'all'"
+      >
+        全部 <span class="count">({{ allTasks.length }})</span>
+      </button>
+      <button 
+        v-for="status in availableStatuses" 
+        :key="status"
+        :class="['filter-btn', `filter-${status}`, { active: selectedStatus === status }]"
+        @click="selectedStatus = status"
+      >
+        {{ status }} <span class="count">({{ getStatusCount(status) }})</span>
+      </button>
     </div>
 
     <div v-if="loading" class="loading">
@@ -15,7 +33,7 @@
 
     <div v-else class="tasks-grid">
       <div 
-        v-for="task in tasks" 
+        v-for="task in filteredTasks" 
         :key="task.name"
         class="task-card"
         @click="goToTask(task.name)"
@@ -23,7 +41,7 @@
         <div class="task-header">
           <h3>{{ task.name }}</h3>
           <span :class="`status-badge status-${task.status}`">
-            {{ getStatusText(task.status) }}
+            {{ task.status }}
           </span>
         </div>
         
@@ -48,9 +66,10 @@
         </div>
       </div>
       
-      <div v-if="tasks.length === 0" class="empty-state">
-        <p>暂无任务</p>
-        <p class="empty-help">
+      <div v-if="filteredTasks.length === 0" class="empty-state">
+        <p v-if="allTasks.length === 0">暂无任务</p>
+        <p v-else>该状态下暂无任务</p>
+        <p class="empty-help" v-if="allTasks.length === 0">
           请在项目目录中创建任务文件夹
         </p>
       </div>
@@ -66,9 +85,22 @@ export default {
   props: ['projectName'],
   data() {
     return {
-      tasks: [],
+      allTasks: [],
       projectInfo: null,
-      loading: true
+      loading: true,
+      selectedStatus: 'all'
+    }
+  },
+  computed: {
+    filteredTasks() {
+      if (this.selectedStatus === 'all') {
+        return this.allTasks
+      }
+      return this.allTasks.filter(task => task.status === this.selectedStatus)
+    },
+    availableStatuses() {
+      const statuses = [...new Set(this.allTasks.map(task => task.status || 'pending'))]
+      return statuses.sort()
     }
   },
   async mounted() {
@@ -87,7 +119,8 @@ export default {
         // 加载项目信息
         const projectResponse = await axios.get(`/api/projects/${this.projectName}`)
         this.projectInfo = projectResponse.data
-        this.tasks = projectResponse.data.tasks || []
+        this.allTasks = projectResponse.data.tasks || []
+        this.selectedStatus = 'all'
         
       } catch (error) {
         console.error('Failed to load project:', error)
@@ -101,14 +134,8 @@ export default {
       this.$router.push(`/project/${this.projectName}/task/${taskName}`)
     },
     
-    getStatusText(status) {
-      const statusMap = {
-        active: '进行中',
-        pending: '待开始',
-        completed: '已完成',
-        paused: '已暂停'
-      }
-      return statusMap[status] || '未知'
+    getStatusCount(status) {
+      return this.allTasks.filter(task => task.status === status).length
     }
   }
 }
@@ -247,5 +274,70 @@ export default {
   font-size: 0.9rem;
   margin-top: 0.5rem;
   opacity: 0.8;
+}
+
+/* 状态筛选器样式 */
+.status-filter {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 0.5rem 1rem;
+  border: 2px solid #e5e5e5;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-btn:hover {
+  border-color: #007bff;
+  background: #f8f9fa;
+}
+
+.filter-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.filter-btn .count {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.filter-btn.active .count {
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* 状态特定颜色 */
+.filter-active.active {
+  background: #28a745;
+  border-color: #28a745;
+}
+
+.filter-pending.active {
+  background: #ffc107;
+  border-color: #ffc107;
+  color: #333;
+}
+
+.filter-completed.active {
+  background: #6c757d;
+  border-color: #6c757d;
+}
+
+.filter-paused.active {
+  background: #dc3545;
+  border-color: #dc3545;
 }
 </style>

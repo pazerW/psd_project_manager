@@ -5,6 +5,46 @@ const matter = require("gray-matter");
 
 const router = express.Router();
 
+// 确保 README.md 存在的工具函数
+async function ensureReadme(dirPath, name, type = "task") {
+  const readmePath = path.join(dirPath, "README.md");
+
+  if (!(await fs.pathExists(readmePath))) {
+    const timestamp = new Date().toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const content = `---
+title: ${name}
+created: ${timestamp}
+status: pending
+---
+
+# ${name}
+
+## 任务信息
+
+- 创建时间: ${timestamp}
+- 状态: 待处理
+
+## 设计文件说明
+
+<!-- 上传文件后，在这里添加说明 -->
+
+## 备注
+
+<!-- 其他备注信息 -->
+`;
+
+    await fs.writeFile(readmePath, content, "utf-8");
+    console.log(`Created README.md for task: ${name}`);
+  }
+}
+
 // 获取特定项目的所有任务
 router.get("/:projectName", async (req, res) => {
   try {
@@ -21,6 +61,8 @@ router.get("/:projectName", async (req, res) => {
     for (const item of items) {
       if (item.isDirectory() && !item.name.startsWith(".")) {
         const taskPath = path.join(projectPath, item.name);
+        // 确保任务 README.md 存在
+        await ensureReadme(taskPath, item.name, "task");
         const task = await analyzeTaskDetails(taskPath, item.name, projectName);
         tasks.push(task);
       }
@@ -42,6 +84,8 @@ router.get("/:projectName/:taskName", async (req, res) => {
       return res.status(404).json({ error: "Task not found" });
     }
 
+    // 确保任务 README.md 存在
+    await ensureReadme(taskPath, taskName, "task");
     const task = await analyzeTaskDetails(taskPath, taskName, projectName);
 
     res.json(task);

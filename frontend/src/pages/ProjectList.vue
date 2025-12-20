@@ -19,7 +19,7 @@
         <div class="project-header">
           <h3>{{ project.name }}</h3>
           <span :class="`status-badge status-${project.status}`">
-            {{ getStatusText(project.status) }}
+            {{ project.status }}
           </span>
         </div>
         
@@ -81,16 +81,6 @@ export default {
     
     goToProject(projectName) {
       this.$router.push(`/project/${projectName}`)
-    },
-    
-    getStatusText(status) {
-      const statusMap = {
-        active: '进行中',
-        pending: '待开始',
-        completed: '已完成',
-        paused: '已暂停'
-      }
-      return statusMap[status] || '未知'
     }
   }
 }
