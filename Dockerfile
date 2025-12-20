@@ -30,7 +30,9 @@ RUN npm install && \
 COPY . .
 
 # 构建前端
-# RU创建数据目录
+RUN cd frontend && npm run build
+
+# 创建数据目录
 RUN mkdir -p /app/data /app/logs /app/uploads
 
 # 暴露端口（生产环境只需要后端端口）
@@ -47,7 +49,5 @@ COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # 启动命令
-ENTRYPOINT ["docker-entrypoint.sh"]DE_ENV=production
-
-# 启动命令
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["npm", "start"]
