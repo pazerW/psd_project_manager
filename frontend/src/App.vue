@@ -4,7 +4,7 @@
       <div class="container">
         <h1>
           <router-link to="/" class="logo">
-            设计文件项目管理器
+            Design Project Management
           </router-link>
         </h1>
         <nav class="breadcrumb">

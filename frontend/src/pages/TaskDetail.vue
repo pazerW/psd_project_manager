@@ -57,7 +57,8 @@
               <img 
                 :src="file.thumbnailUrl" 
                 :alt="file.name"
-                @error="handleImageError"
+                @error="handleImageError($event, file.name)"
+                :key="file.thumbnailUrl"
               />
             </div>
             <div class="psd-info">
@@ -335,8 +336,12 @@ export default {
       }
     },
     
-    handleImageError(event) {
-      event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM2NjYiIGZvbnQtc2l6ZT0iMTQiPuePreeVpeS4jeWPr+eUqDwvdGV4dD48L3N2Zz4='
+    handleImageError(event, fileName) {
+      console.error('Failed to load thumbnail for:', fileName);
+      console.error('Thumbnail URL:', event.target.src);
+      // 使用更明显的占位符图片
+      event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHJlY3QgeD0iMzAwIiB5PSIyMDAiIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZGRkIiByeD0iMTAiLz48dGV4dCB4PSI0MDAiIHk9IjI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSIgZm9udC1zaXplPSI0OCIgZm9udC1mYW1pbHk9IkFyaWFsIj7wn5OMPC90ZXh0Pjx0ZXh0IHg9IjQwMCIgeT0iMzYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjE4IiBmb250LWZhbWlseT0iQXJpYWwiPue8qeeVpeWbvuWKoOi9veWksei0pTwvdGV4dD48dGV4dCB4PSI0MDAiIHk9IjM5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSIgZm9udC1zaXplPSIxNCIgZm9udC1mYW1pbHk9IkFyaWFsIj7or7fkuIvovb3ljp/lp4vmlofku7Y8L3RleHQ+PC9zdmc+'
+      event.target.onerror = null; // 防止无限循环
     },
     
     formatFileSize(bytes) {

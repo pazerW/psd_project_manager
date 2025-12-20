@@ -151,6 +151,7 @@ async function generateThumbnail(filePath, thumbnailPath, fileExt) {
       ].includes(fileExt)
     ) {
       // 普通图片文件，使用Sharp直接处理
+      console.log(`Processing image file: ${filePath} (${fileExt})`);
       await generateImageThumbnail(filePath, thumbnailPath);
     } else if (fileExt === ".psd") {
       // PSD文件，使用Sharp或ImageMagick
@@ -165,34 +166,64 @@ async function generateThumbnail(filePath, thumbnailPath, fileExt) {
       // 不支持的格式，生成占位符
       await generatePlaceholderThumbnail(thumbnailPath, fileExt);
     }
+    
+    // 验证缩略图是否生成成功
+    if (!(await fs.pathExists(thumbnailPath))) {
+      console.error(`Thumbnail file not created at: ${thumbnailPath}`);
+      throw new Error('Thumbnail file was not created');
+    }
+    
+    const stats = await fs.stat(thumbnailPath);
+    if (stats.size === 0) {
+      console.error(`Thumbnail file is empty: ${thumbnailPath}`);
+      throw new Error('Thumbnail file is empty');
+    }
+    
+    console.log(`Thumbnail successfully generated: ${thumbnailPath} (${stats.size} bytes)`);
   } catch (error) {
     console.error("Thumbnail generation failed:", error);
     // 如果生成失败，创建占位符
-    await generatePlaceholderThumbnail(thumbnailPath, fileExt);
+    try {
+      await generatePlaceholderThumbnail(thumbnailPath, fileExt);
+      console.log(`Created placeholder thumbnail for ${fileExt}`);
+    } catch (placeholderError) {
+      console.error("Failed to create placeholder:", placeholderError);
+      throw placeholderError;
+    }
   }
 }
 
 // 生成普通图片缩略图
 async function generateImageThumbnail(filePath, thumbnailPath) {
-  await sharp(filePath)
-    .resize(300, 300, { fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 80 })
-    .toFile(thumbnailPath);
+  console.log(`Generating image thumbnail for ${filePath}`);
+  try {
+    await sharp(filePath)
+      .rotate() // 自动根据EXIF旋转图片
+      .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toFile(thumbnailPath);
+    console.log(`Image thumbnail generated successfully: ${thumbnailPath}`);
+  } catch (error) {
+    console.error(`Failed to generate image thumbnail: ${error.message}`);
+    throw error;
+  }
 }
 
 // 生成PSD缩略图
 async function generatePsdThumbnail(filePath, thumbnailPath) {
+  console.log(`Generating PSD thumbnail for ${filePath}`);
   try {
     // 首先尝试Sharp，只读取PSD保存状态下的静态合成图像
     await sharp(filePath, {
       page: 0, // 只读取第一页（合成预览图）
       animated: false, // 禁用动图处理
-      density: 72, // 使用标准屏幕分辨率
+      density: 150, // 使用更高分辨率
     })
       .flatten({ background: { r: 255, g: 255, b: 255 } }) // 将透明背景合并为白色
-      .resize(300, 300, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 80 })
+      .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 85 })
       .toFile(thumbnailPath);
+    console.log(`PSD thumbnail generated successfully with Sharp: ${thumbnailPath}`);
   } catch (sharpError) {
     console.log(
       "Sharp failed for PSD, trying ImageMagick:",
@@ -216,10 +247,17 @@ async function generateAiThumbnail(filePath, thumbnailPath) {
 
 // 生成SVG缩略图
 async function generateSvgThumbnail(filePath, thumbnailPath) {
-  await sharp(filePath)
-    .resize(300, 300, { fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 80 })
-    .toFile(thumbnailPath);
+  console.log(`Generating SVG thumbnail for ${filePath}`);
+  try {
+    await sharp(filePath)
+      .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toFile(thumbnailPath);
+    console.log(`SVG thumbnail generated successfully: ${thumbnailPath}`);
+  } catch (error) {
+    console.error(`Failed to generate SVG thumbnail: ${error.message}`);
+    throw error;
+  }
 }
 
 // 使用ImageMagick生成缩略图
@@ -228,6 +266,7 @@ async function generateThumbnailWithImageMagick(
   thumbnailPath,
   pageSelector = ""
 ) {
+  console.log(`Generating thumbnail with ImageMagick for ${filePath}`);
   return new Promise((resolve, reject) => {
     const inputFile = filePath + pageSelector;
     const magick = spawn("magick", [
@@ -237,9 +276,9 @@ async function generateThumbnailWithImageMagick(
       "-background",
       "white", // 设置透明背景为白色
       "-thumbnail",
-      "300x300>",
+      "800x800>",
       "-quality",
-      "80",
+      "85",
       "-strip", // 移除元数据
       thumbnailPath,
     ]);
@@ -267,12 +306,13 @@ async function generateThumbnailWithImageMagick(
 
 // 生成占位符缩略图
 async function generatePlaceholderThumbnail(thumbnailPath, fileExt) {
+  console.log(`Generating placeholder thumbnail for ${fileExt}`);
   const placeholderText = getFileTypeText(fileExt);
 
   await sharp({
     create: {
-      width: 300,
-      height: 200,
+      width: 800,
+      height: 600,
       channels: 4,
       background: { r: 240, g: 240, b: 240, alpha: 1 },
     },
@@ -280,12 +320,12 @@ async function generatePlaceholderThumbnail(thumbnailPath, fileExt) {
     .composite([
       {
         input: Buffer.from(`
-      <svg width="300" height="200">
-        <rect width="300" height="200" fill="#f0f0f0" stroke="#ddd" stroke-width="2"/>
-        <text x="150" y="90" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#666">
+      <svg width="800" height="600">
+        <rect width="800" height="600" fill="#f0f0f0" stroke="#ddd" stroke-width="2"/>
+        <text x="400" y="280" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#666">
           ${placeholderText}
         </text>
-        <text x="150" y="120" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#999">
+        <text x="400" y="340" font-family="Arial, sans-serif" font-size="48" text-anchor="middle" fill="#999">
           ${fileExt.toUpperCase()}
         </text>
       </svg>
@@ -294,8 +334,9 @@ async function generatePlaceholderThumbnail(thumbnailPath, fileExt) {
         left: 0,
       },
     ])
-    .webp({ quality: 80 })
+    .webp({ quality: 85 })
     .toFile(thumbnailPath);
+  console.log(`Placeholder thumbnail generated: ${thumbnailPath}`);
 }
 
 // 获取文件类型显示文本
@@ -378,7 +419,7 @@ async function generateAiThumbnailWithImageMagick(filePath, thumbnailPath) {
       "-background",
       "white", // 设置透明背景为白色
       "-resize",
-      "300x300>", // 调整大小
+      "800x800>", // 调整大小
       "-quality",
       "85", // 稍高的质量以保持细节
       "-strip", // 移除元数据
