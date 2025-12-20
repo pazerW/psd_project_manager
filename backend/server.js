@@ -48,10 +48,14 @@ app.get("/health", (req, res) => {
 const FRONTEND_DIST = path.join(__dirname, "../frontend/dist");
 if (fs.existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));
-  
+
   // SPA 路由支持 - 所有非 API 请求返回 index.html
   app.get("*", (req, res) => {
-    if (!req.path.startsWith("/api") && !req.path.startsWith("/thumbnails") && req.path !== "/health") {
+    if (
+      !req.path.startsWith("/api") &&
+      !req.path.startsWith("/thumbnails") &&
+      req.path !== "/health"
+    ) {
       res.sendFile(path.join(FRONTEND_DIST, "index.html"));
     }
   });
@@ -60,6 +64,14 @@ if (fs.existsSync(FRONTEND_DIST)) {
 app.listen(PORT, () => {
   console.log(`PSD Project Manager Backend running on port ${PORT}`);
   console.log(`Data directory: ${DATA_PATH}`);
-  const frontendEnabled = fs.existsSync(path.join(__dirname, "../frontend/dist"));
-  console.log(`Frontend: ${frontendEnabled ? "Enabled (serving from /frontend/dist)" : "Disabled (build frontend first)"}`);
+  const frontendEnabled = fs.existsSync(
+    path.join(__dirname, "../frontend/dist")
+  );
+  console.log(
+    `Frontend: ${
+      frontendEnabled
+        ? "Enabled (serving from /frontend/dist)"
+        : "Disabled (build frontend first)"
+    }`
+  );
 });

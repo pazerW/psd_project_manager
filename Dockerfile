@@ -30,8 +30,8 @@ COPY . .
 # 构建前端
 RUN cd frontend && npm run build
 
-# 暴露端口
-EXPOSE 3000 5173
+# 暴露端口（生产环境只需要后端端口）
+EXPOSE 3000
 
 # 创建数据目录
 RUN mkdir -p /app/data

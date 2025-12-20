@@ -4,8 +4,7 @@ services:
   psd-manager:
     build: .
     ports:
-      - "3000:3000"
-      - "5173:5173"
+      - "3000:3000"  # 前端 + 后端统一访问端口
     volumes:
       # 将本地数据目录挂载到容器内
       - ./data:/app/data
