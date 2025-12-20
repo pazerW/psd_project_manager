@@ -41,17 +41,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
         continue-on-error: true
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # 如果设置了DOCKER_USERNAME则使用，否则使用本地标签
-          images: ${{ secrets.DOCKER_USERNAME && format('{0}/psd-project-manager', secrets.DOCKER_USERNAME) || 'psd-project-manager' }}
-          tags: |
-            # latest标签
-            type=raw,value=latest
-            # 时间戳标签
-            type=schedule,pattern={{date 'YYYYMMDD-HHmmss'}}
+
 
       - name: Build and push Docker image
         id: build
@@ -61,7 +51,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           # 只有在非PR时才尝试推送（如果登录失败则会跳过推送）
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}:${{ github.run_number }}-${{ github.sha }}
+            
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
