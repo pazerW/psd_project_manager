@@ -15,8 +15,6 @@ on:
 
 env:
   REGISTRY: docker.io
-  # 使用默认值，如果secret未设置则使用本地构建
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME || 'local' }}/psd-project-manager
 
 jobs:
   build-and-push:
@@ -36,18 +34,18 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != ''
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-        continue-on-error: true
 
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          # 如果设置了DOCKER_USERNAME则使用，否则使用本地标签
+          images: ${{ secrets.DOCKER_USERNAME && format('{0}/psd-project-manager', secrets.DOCKER_USERNAME) || 'psd-project-manager' }}
           tags: |
             # 为标签版本生成标签
             type=semver,pattern={{version}}
@@ -68,8 +66,8 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          # 非PR时推送（如果login失败，push会自动失败但镜像仍会构建）
-          push: ${{ github.event_name != 'pull_request' }}
+          # 只有在登录成功时才推送
+          push: ${{ github.event_name != 'pull_request' && secrets.DOCKER_USERNAME != '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
