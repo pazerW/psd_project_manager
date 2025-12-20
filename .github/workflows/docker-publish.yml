@@ -42,3 +42,4 @@ jobs:
           IMAGE_NAME="registry.cn-beijing.aliyuncs.com/pazerwong/design_project_management"
           TAG="latest"
           docker push "${IMAGE_NAME}:${TAG}"
+          
