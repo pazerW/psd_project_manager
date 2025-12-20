@@ -52,8 +52,8 @@ jobs:
           # 只有在非PR时才尝试推送（如果登录失败则会跳过推送）
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}:latest
-            ${{ env.REGISTRY }}/${{ github.repository }}:${{ github.run_number }}-${{ github.sha }}
+            ${{ env.REGISTRY }}/design_project_manager:latest
+            ${{ env.REGISTRY }}/design_project_manager:${{ github.run_number }}-${{ github.sha }}
             
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
