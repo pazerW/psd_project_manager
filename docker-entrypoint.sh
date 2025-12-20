@@ -19,23 +19,31 @@ else
     addgroup -g ${PGID} ${GROUP_NAME}
 fi
 
-# 创建用户（如果不存在）
-if ! getent passwd appuser >/dev/null 2>&1; then
-    echo "Creating user appuser with UID: $PUID"
-    adduser -D -u ${PUID} -G ${GROUP_NAME} appuser
-elif ! id -nG appuser | grep -qw ${GROUP_NAME}; then
-    # 用户存在但不在正确的组中
-    echo "Adding appuser to group ${GROUP_NAME}"
-    addgroup appuser ${GROUP_NAME} 2>/dev/null || true
+# 获取或创建用户
+USER_NAME="appuser"
+if getent passwd ${PUID} >/dev/null 2>&1; then
+    # UID 已存在，使用现有用户
+    USER_NAME=$(getent passwd ${PUID} | cut -d: -f1)
+    echo "Using existing user: $USER_NAME (UID: $PUID)"
+elif getent passwd ${USER_NAME} >/dev/null 2>&1; then
+    # appuser 存在但 UID 不同
+    echo "User $USER_NAME exists with different UID, using existing user"
+    USER_NAME=$(getent passwd ${USER_NAME} | cut -d: -f1)
+else
+    # 用户不存在，创建新用户
+    echo "Creating user $USER_NAME with UID: $PUID"
+    adduser -D -u ${PUID} -G ${GROUP_NAME} ${USER_NAME}
 fi
 
 # 确保数据目录存在
-mkdir -p /app/data /app/logs /app/uploads
+[ ! -d /app/data ] && mkdir -p /app/data
+[ ! -d /app/logs ] && mkdir -p /app/logs
+[ ! -d /app/uploads ] && mkdir -p /app/uploads
 
 echo "Setting permissions on data directories..."
 chown -R ${PUID}:${PGID} /app/data /app/logs /app/uploads 2>/dev/null || true
 
-echo "Starting application as appuser (UID: $PUID, GID: $PGID)..."
+echo "Starting application as $USER_NAME (UID: $PUID, GID: $PGID)..."
 
 # 以指定用户运行命令
-exec su-exec appuser "$@"
+exec su-exec ${USER_NAME} "$@"
