@@ -47,18 +47,10 @@ jobs:
           # 如果设置了DOCKER_USERNAME则使用，否则使用本地标签
           images: ${{ secrets.DOCKER_USERNAME && format('{0}/psd-project-manager', secrets.DOCKER_USERNAME) || 'psd-project-manager' }}
           tags: |
-            # 为标签版本生成标签
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # 为主分支生成latest标签
-            type=raw,value=latest,enable={{is_default_branch}}
-            # 为分支生成标签
-            type=ref,event=branch
-            # 为PR生成标签
-            type=ref,event=pr
-            # 使用git commit SHA
-            type=sha,prefix={{branch}}-
+            # latest标签
+            type=raw,value=latest
+            # 时间戳标签
+            type=schedule,pattern={{date 'YYYYMMDD-HHmmss'}}
 
       - name: Build and push Docker image
         id: build
