@@ -207,30 +207,58 @@ async function mergeChunks(dataPath, uploadInfo) {
 // 预生成缩略图的辅助函数
 async function pregen缩略图(dataPath, projectName, taskName, fileName) {
   const fileExt = path.extname(fileName).toLowerCase();
-  
+
   // 只为支持的文件类型预生成缩略图
-  const supportedTypes = [".psd", ".ai", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff", ".tif"];
-  
+  const supportedTypes = [
+    ".psd",
+    ".ai",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".svg",
+    ".tiff",
+    ".tif",
+  ];
+
   if (!supportedTypes.includes(fileExt)) {
     return;
   }
 
   console.log(`开始为 ${fileName} 预生成缩略图...`);
-  
+
   const filePath = path.join(dataPath, projectName, taskName, fileName);
-  const thumbnailDir = path.join(dataPath, ".thumbnails", projectName, taskName);
+  const thumbnailDir = path.join(
+    dataPath,
+    ".thumbnails",
+    projectName,
+    taskName
+  );
   await fs.ensureDir(thumbnailDir);
   const thumbnailPath = path.join(thumbnailDir, `${fileName}.webp`);
 
   // 引入文件处理模块的生成函数
   const filesRouter = require("./files.js");
-  
+
   try {
     // 调用缩略图生成逻辑
     const sharp = require("sharp");
     const { spawn } = require("child_process");
-    
-    if ([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif"].includes(fileExt)) {
+
+    if (
+      [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".webp",
+        ".tiff",
+        ".tif",
+      ].includes(fileExt)
+    ) {
       await sharp(filePath)
         .resize(300, 300, { fit: "inside", withoutEnlargement: true })
         .webp({ quality: 80 })
@@ -249,19 +277,27 @@ async function pregen缩略图(dataPath, projectName, taskName, fileName) {
       await new Promise((resolve, reject) => {
         const magick = spawn("magick", [
           `${filePath}[0]`,
-          "-density", "150",
-          "-colorspace", "sRGB",
+          "-density",
+          "150",
+          "-colorspace",
+          "sRGB",
           "-flatten",
-          "-background", "white",
-          "-resize", "300x300>",
-          "-quality", "85",
+          "-background",
+          "white",
+          "-resize",
+          "300x300>",
+          "-quality",
+          "85",
           "-strip",
-          "-sharpen", "0x0.5",
+          "-sharpen",
+          "0x0.5",
           thumbnailPath,
         ]);
-        
+
         let stderr = "";
-        magick.stderr.on("data", (data) => { stderr += data.toString(); });
+        magick.stderr.on("data", (data) => {
+          stderr += data.toString();
+        });
         magick.on("close", (code) => {
           if (code === 0) {
             console.log(`AI文件 ${fileName} 缩略图生成成功`);
@@ -278,7 +314,7 @@ async function pregen缩略图(dataPath, projectName, taskName, fileName) {
         .webp({ quality: 80 })
         .toFile(thumbnailPath);
     }
-    
+
     console.log(`${fileName} 缩略图预生成完成`);
   } catch (error) {
     console.error(`${fileName} 缩略图预生成失败:`, error.message);
