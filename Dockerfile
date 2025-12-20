@@ -30,7 +30,7 @@ RUN npm install && \
 COPY . .
 
 # 构建前端
-RU创建数据目录
+# RU创建数据目录
 RUN mkdir -p /app/data /app/logs /app/uploads
 
 # 暴露端口（生产环境只需要后端端口）
