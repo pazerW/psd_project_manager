@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  psd-manager:
+    build: .
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    volumes:
+      # 将本地数据目录挂载到容器内
+      - ./data:/app/data
+      # SMB挂载点示例（根据实际情况调整）
+      # - /mnt/smb/projects:/app/data
+    environment:
+      - DATA_PATH=/app/data
+      - NODE_ENV=production
+    restart: unless-stopped
+    
+  # 可选：添加SMB服务器（用于测试）
+  # samba:
+  #   image: dperson/samba
+  #   ports:
+  #     - "139:139"
+  #     - "445:445"
+  #   volumes:
+  #     - ./data:/mount
+  #   command: '-s "projects;/mount;yes;no;no;all;none" -u "user;password"'
+  #   restart: unless-stopped

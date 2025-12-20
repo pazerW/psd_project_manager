@@ -1,0 +1,19 @@
+{
+  "name": "psd-project-manager",
+  "version": "1.0.0",
+  "description": "Local-first PSD project management system",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "docker:build": "docker build -t psd-project-manager .",
+    "docker:run": "docker run -p 3000:3000 -p 5173:5173 -v $(pwd)/data:/app/data psd-project-manager"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

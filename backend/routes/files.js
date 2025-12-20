@@ -1,0 +1,420 @@
+const express = require("express");
+const fs = require("fs-extra");
+const path = require("path");
+const sharp = require("sharp");
+const { spawn } = require("child_process");
+const matter = require("gray-matter");
+
+const router = express.Router();
+
+// 获取文件缩略图
+router.get("/thumbnail/:projectName/:taskName/:fileName", async (req, res) => {
+  console.log("Thumbnail request:", req.params);
+
+  try {
+    const { projectName, taskName, fileName } = req.params;
+    const fileExt = path.extname(fileName).toLowerCase();
+
+    // 缓存路径
+    const thumbnailDir = path.join(
+      req.dataPath,
+      ".thumbnails",
+      projectName,
+      taskName
+    );
+    const thumbnailPath = path.join(thumbnailDir, `${fileName}.webp`);
+
+    console.log("Checking thumbnail cache:", thumbnailPath);
+
+    // 检查缓存是否存在
+    if (await fs.pathExists(thumbnailPath)) {
+      console.log("Thumbnail cache found, serving file");
+      const stats = await fs.stat(thumbnailPath);
+      res.set({
+        "Content-Type": "image/webp",
+        "Content-Length": stats.size,
+        "Cache-Control": "public, max-age=86400", // 24小时缓存
+      });
+      return fs.createReadStream(thumbnailPath).pipe(res);
+    }
+
+    // 原始文件路径
+    const filePath = path.join(req.dataPath, projectName, taskName, fileName);
+    console.log("Checking file:", filePath);
+
+    if (!(await fs.pathExists(filePath))) {
+      console.log("File not found:", filePath);
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    console.log("Generating thumbnail for:", filePath);
+
+    // 根据文件类型生成缩略图
+    await generateThumbnail(filePath, thumbnailPath, fileExt);
+
+    // 返回生成的缩略图
+    if (await fs.pathExists(thumbnailPath)) {
+      const stats = await fs.stat(thumbnailPath);
+      res.set({
+        "Content-Type": "image/webp",
+        "Content-Length": stats.size,
+        "Cache-Control": "public, max-age=86400",
+      });
+      fs.createReadStream(thumbnailPath).pipe(res);
+    } else {
+      console.log("Thumbnail generation failed");
+      res.status(500).json({ error: "Thumbnail generation failed" });
+    }
+  } catch (error) {
+    console.error("Thumbnail generation error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 下载文件
+router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
+  try {
+    const { projectName, taskName, fileName } = req.params;
+    const filePath = path.join(req.dataPath, projectName, taskName, fileName);
+
+    if (!(await fs.pathExists(filePath))) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    const stats = await fs.stat(filePath);
+    res.set({
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Length": stats.size,
+    });
+
+    fs.createReadStream(filePath).pipe(res);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 删除文件
+router.delete("/:projectName/:taskName/:fileName", async (req, res) => {
+  try {
+    const { projectName, taskName, fileName } = req.params;
+    const filePath = path.join(req.dataPath, projectName, taskName, fileName);
+
+    if (!(await fs.pathExists(filePath))) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    // 删除原文件
+    await fs.remove(filePath);
+
+    // 删除对应的缩略图
+    const thumbnailPath = path.join(
+      req.dataPath,
+      ".thumbnails",
+      projectName,
+      taskName,
+      `${fileName}.webp`
+    );
+    if (await fs.pathExists(thumbnailPath)) {
+      await fs.remove(thumbnailPath);
+    }
+
+    // 删除README中对应的文件描述
+    await removeFileDescriptionFromReadme(
+      req.dataPath,
+      projectName,
+      taskName,
+      fileName
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 生成缩略图的主函数
+async function generateThumbnail(filePath, thumbnailPath, fileExt) {
+  await fs.ensureDir(path.dirname(thumbnailPath));
+
+  try {
+    if (
+      [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".webp",
+        ".tiff",
+        ".tif",
+      ].includes(fileExt)
+    ) {
+      // 普通图片文件，使用Sharp直接处理
+      await generateImageThumbnail(filePath, thumbnailPath);
+    } else if (fileExt === ".psd") {
+      // PSD文件，使用Sharp或ImageMagick
+      await generatePsdThumbnail(filePath, thumbnailPath);
+    } else if (fileExt === ".ai") {
+      // AI文件，使用ImageMagick
+      await generateAiThumbnail(filePath, thumbnailPath);
+    } else if (fileExt === ".svg") {
+      // SVG文件，使用Sharp
+      await generateSvgThumbnail(filePath, thumbnailPath);
+    } else {
+      // 不支持的格式，生成占位符
+      await generatePlaceholderThumbnail(thumbnailPath, fileExt);
+    }
+  } catch (error) {
+    console.error("Thumbnail generation failed:", error);
+    // 如果生成失败，创建占位符
+    await generatePlaceholderThumbnail(thumbnailPath, fileExt);
+  }
+}
+
+// 生成普通图片缩略图
+async function generateImageThumbnail(filePath, thumbnailPath) {
+  await sharp(filePath)
+    .resize(300, 300, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toFile(thumbnailPath);
+}
+
+// 生成PSD缩略图
+async function generatePsdThumbnail(filePath, thumbnailPath) {
+  try {
+    // 首先尝试Sharp，只读取PSD保存状态下的静态合成图像
+    await sharp(filePath, {
+      page: 0, // 只读取第一页（合成预览图）
+      animated: false, // 禁用动图处理
+      density: 72, // 使用标准屏幕分辨率
+    })
+      .flatten({ background: { r: 255, g: 255, b: 255 } }) // 将透明背景合并为白色
+      .resize(300, 300, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(thumbnailPath);
+  } catch (sharpError) {
+    console.log(
+      "Sharp failed for PSD, trying ImageMagick:",
+      sharpError.message
+    );
+    // Sharp失败，尝试ImageMagick，使用[0]只取第一个合成图像
+    await generateThumbnailWithImageMagick(filePath, thumbnailPath, "[0]");
+  }
+}
+
+// 生成AI文件缩略图
+async function generateAiThumbnail(filePath, thumbnailPath) {
+  try {
+    // AI文件是矢量格式，需要特殊处理以获得最佳质量
+    await generateAiThumbnailWithImageMagick(filePath, thumbnailPath);
+  } catch (error) {
+    console.log("ImageMagick failed for AI file:", error.message);
+    await generatePlaceholderThumbnail(thumbnailPath, ".ai");
+  }
+}
+
+// 生成SVG缩略图
+async function generateSvgThumbnail(filePath, thumbnailPath) {
+  await sharp(filePath)
+    .resize(300, 300, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toFile(thumbnailPath);
+}
+
+// 使用ImageMagick生成缩略图
+async function generateThumbnailWithImageMagick(
+  filePath,
+  thumbnailPath,
+  pageSelector = ""
+) {
+  return new Promise((resolve, reject) => {
+    const inputFile = filePath + pageSelector;
+    const magick = spawn("magick", [
+      inputFile,
+      "-coalesce", // 确保获取完整的合成图像
+      "-flatten", // 将所有图层合并为单一静态图像
+      "-background",
+      "white", // 设置透明背景为白色
+      "-thumbnail",
+      "300x300>",
+      "-quality",
+      "80",
+      "-strip", // 移除元数据
+      thumbnailPath,
+    ]);
+
+    let stderr = "";
+
+    magick.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    magick.on("close", (code) => {
+      if (code === 0) {
+        console.log("ImageMagick thumbnail generated successfully");
+        resolve();
+      } else {
+        reject(new Error(`ImageMagick failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    magick.on("error", (error) => {
+      reject(new Error(`Failed to spawn ImageMagick: ${error.message}`));
+    });
+  });
+}
+
+// 生成占位符缩略图
+async function generatePlaceholderThumbnail(thumbnailPath, fileExt) {
+  const placeholderText = getFileTypeText(fileExt);
+
+  await sharp({
+    create: {
+      width: 300,
+      height: 200,
+      channels: 4,
+      background: { r: 240, g: 240, b: 240, alpha: 1 },
+    },
+  })
+    .composite([
+      {
+        input: Buffer.from(`
+      <svg width="300" height="200">
+        <rect width="300" height="200" fill="#f0f0f0" stroke="#ddd" stroke-width="2"/>
+        <text x="150" y="90" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="#666">
+          ${placeholderText}
+        </text>
+        <text x="150" y="120" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#999">
+          ${fileExt.toUpperCase()}
+        </text>
+      </svg>
+    `),
+        top: 0,
+        left: 0,
+      },
+    ])
+    .webp({ quality: 80 })
+    .toFile(thumbnailPath);
+}
+
+// 获取文件类型显示文本
+function getFileTypeText(fileExt) {
+  const typeMap = {
+    ".psd": "Photoshop文档",
+    ".ai": "Illustrator文档",
+    ".svg": "SVG矢量图",
+    ".jpg": "图片文件",
+    ".jpeg": "图片文件",
+    ".png": "图片文件",
+    ".gif": "动图文件",
+    ".bmp": "位图文件",
+    ".webp": "图片文件",
+    ".tiff": "图片文件",
+    ".tif": "图片文件",
+  };
+  return typeMap[fileExt] || "文件";
+}
+
+// 从README中删除文件描述
+async function removeFileDescriptionFromReadme(
+  dataPath,
+  projectName,
+  taskName,
+  fileName
+) {
+  const taskPath = path.join(dataPath, projectName, taskName);
+  const readmePath = path.join(taskPath, "README.md");
+
+  if (!(await fs.pathExists(readmePath))) {
+    return; // README不存在，无需处理
+  }
+
+  let content = "";
+  let frontmatter = {};
+
+  // 读取现有README
+  const fileContent = await fs.readFile(readmePath, "utf8");
+  const parsed = matter(fileContent);
+  content = parsed.content;
+  frontmatter = parsed.data;
+
+  // 删除文件描述
+  content = removeFileFromReadmeContent(content, fileName);
+
+  // 写回README文件
+  const fullContent = matter.stringify(content, frontmatter);
+  await fs.writeFile(readmePath, fullContent);
+}
+
+// 从README内容中删除指定文件的描述
+function removeFileFromReadmeContent(content, fileName) {
+  const lines = content.split("\n");
+  const filteredLines = [];
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    // 跳过包含指定文件名的描述行
+    if (trimmedLine.includes(`**${fileName}**`)) {
+      continue;
+    }
+    filteredLines.push(line);
+  }
+
+  return filteredLines.join("\n");
+}
+
+// 专门处理AI文件的ImageMagick函数
+async function generateAiThumbnailWithImageMagick(filePath, thumbnailPath) {
+  return new Promise((resolve, reject) => {
+    // AI文件专用处理参数
+    const magick = spawn("magick", [
+      `${filePath}[0]`, // 只读取第一个页面/画板
+      "-density",
+      "150", // 设置较高的分辨率以保持矢量图清晰度
+      "-colorspace",
+      "sRGB", // 确保颜色空间正确
+      "-flatten", // 将所有图层合并为单一图像
+      "-background",
+      "white", // 设置透明背景为白色
+      "-resize",
+      "300x300>", // 调整大小
+      "-quality",
+      "85", // 稍高的质量以保持细节
+      "-strip", // 移除元数据
+      "-sharpen",
+      "0x0.5", // 轻微锐化以增强矢量图的清晰度
+      thumbnailPath,
+    ]);
+
+    let stderr = "";
+    let stdout = "";
+
+    magick.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    magick.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    magick.on("close", (code) => {
+      if (code === 0) {
+        console.log("AI file thumbnail generated successfully");
+        resolve();
+      } else {
+        console.log("ImageMagick stderr:", stderr);
+        console.log("ImageMagick stdout:", stdout);
+        reject(new Error(`ImageMagick failed with code ${code}: ${stderr}`));
+      }
+    });
+
+    magick.on("error", (error) => {
+      reject(
+        new Error(`Failed to spawn ImageMagick for AI file: ${error.message}`)
+      );
+    });
+  });
+}
+
+module.exports = router;

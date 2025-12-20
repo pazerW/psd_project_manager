@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "开发服务器",
+      "type": "shell",
+      "command": "npm run dev",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "构建前端",
+      "type": "shell",
+      "command": "npm run build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "启动生产服务器",
+      "type": "shell",
+      "command": "npm start",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker构建",
+      "type": "shell",
+      "command": "docker build -t psd-project-manager .",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker运行",
+      "type": "shell",
+      "command": "docker-compose up -d",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
