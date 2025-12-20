@@ -1,7 +1,7 @@
 # 设计文件项目管理器
 
 [![Docker Build](https://github.com/YOUR_USERNAME/psd_project_manager/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/YOUR_USERNAME/psd_project_manager/actions/workflows/docker-publish.yml)
-[![Docker Hub](https://img.shields.io/docker/v/YOUR_USERNAME/psd-project-manager?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/YOUR_USERNAME/psd-project-manager)
+[![Aliyun ACR](https://img.shields.io/badge/Aliyun-ACR-orange?logo=alibabacloud)](https://cr.console.aliyun.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 一个本地优先的轻量级设计文件项目管理系统，专为设计工作流优化。支持 PSD、AI、图片等多种文件格式。
@@ -88,25 +88,6 @@ npm run dev
    - 前端：http://localhost:5173
    - 后端API：http://localhost:3000
 
-### 方式三：Docker部署
-
-#### 使用 Docker Hub 镜像（推荐）
-
-```bash
-# 拉取最新镜像
-docker pull <your-dockerhub-username>/psd-project-manager:latest
-
-# 运行容器
-docker run -d \
-  --name psd-manager \
-  -p 3000:3000 \
-  -v $(pwd)/data:/app/data \
-  <your-dockerhub-username>/psd-project-manager:latest
-
-# 或使用 docker-compose
-docker-compose up -d
-```
-
 #### 本地构建镜像
 
 ```bash
@@ -119,30 +100,8 @@ docker-compose up -d
 
 访问：http://localhost:3000
 
-#### GitHub Actions 自动构建
 
-项目已配置 GitHub Actions 自动构建和推送 Docker 镜像到 Docker Hub。
-
-**配置步骤：**
-1. Fork 本仓库
-2. 在 GitHub 仓库设置中添加 Secrets：
-   - `DOCKER_USERNAME`: Docker Hub 用户名
-   - `DOCKER_PASSWORD`: Docker Hub 访问令牌
-3. 推送代码或创建 tag 即可自动构建
-
-**触发构建：**
-```bash
-# 推送到主分支 → 构建 latest 标签
-git push origin main
-
-# 创建版本标签 → 构建版本镜像
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
-```
-
-详见 [.github/workflows/README.md](.github/workflows/README.md)
-
-### 方式四：生产部署
+### 方式三：生产部署
 
 1. 构建前端：
 ```bash
