@@ -164,7 +164,39 @@ async function mergeChunks(dataPath, uploadInfo) {
   // 目标文件路径
   const targetDir = path.join(dataPath, projectName, taskName);
   await fs.ensureDir(targetDir);
-  const targetPath = path.join(targetDir, fileName);
+
+  // 获取文件扩展名
+  const fileExt = path.extname(fileName);
+
+  // 统计当前任务目录下已有的文件数量
+  const existingFiles = await fs.readdir(targetDir);
+  const designFileExtensions = [
+    ".psd",
+    ".ai",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".svg",
+    ".tiff",
+    ".tif",
+  ];
+  const existingDesignFiles = existingFiles.filter((file) => {
+    const ext = path.extname(file).toLowerCase();
+    return designFileExtensions.includes(ext);
+  });
+
+  // 生成新文件名：Project名称_Task名称_序号.扩展名
+  const fileNumber = existingDesignFiles.length + 1;
+  const newFileName = `${projectName}_${taskName}_${fileNumber}${fileExt}`;
+  const targetPath = path.join(targetDir, newFileName);
+
+  console.log(`文件将被重命名为: ${newFileName} (原文件名: ${fileName})`);
+
+  // 更新 uploadInfo 中的文件名，以便后续缩略图生成使用
+  uploadInfo.renamedFileName = newFileName;
 
   // 创建写入流
   const writeStream = fs.createWriteStream(targetPath);
@@ -193,10 +225,13 @@ async function mergeChunks(dataPath, uploadInfo) {
     });
 
     // 文件合并完成后，异步预生成缩略图（不阻塞响应）
+    const finalFileName = uploadInfo.renamedFileName || fileName;
     setImmediate(() => {
-      pregen缩略图(dataPath, projectName, taskName, fileName).catch((err) => {
-        console.error("缩略图预生成失败:", err.message);
-      });
+      pregen缩略图(dataPath, projectName, taskName, finalFileName).catch(
+        (err) => {
+          console.error("缩略图预生成失败:", err.message);
+        }
+      );
     });
   } catch (error) {
     writeStream.destroy();

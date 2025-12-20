@@ -166,20 +166,22 @@ async function generateThumbnail(filePath, thumbnailPath, fileExt) {
       // 不支持的格式，生成占位符
       await generatePlaceholderThumbnail(thumbnailPath, fileExt);
     }
-    
+
     // 验证缩略图是否生成成功
     if (!(await fs.pathExists(thumbnailPath))) {
       console.error(`Thumbnail file not created at: ${thumbnailPath}`);
-      throw new Error('Thumbnail file was not created');
+      throw new Error("Thumbnail file was not created");
     }
-    
+
     const stats = await fs.stat(thumbnailPath);
     if (stats.size === 0) {
       console.error(`Thumbnail file is empty: ${thumbnailPath}`);
-      throw new Error('Thumbnail file is empty');
+      throw new Error("Thumbnail file is empty");
     }
-    
-    console.log(`Thumbnail successfully generated: ${thumbnailPath} (${stats.size} bytes)`);
+
+    console.log(
+      `Thumbnail successfully generated: ${thumbnailPath} (${stats.size} bytes)`
+    );
   } catch (error) {
     console.error("Thumbnail generation failed:", error);
     // 如果生成失败，创建占位符
@@ -223,7 +225,9 @@ async function generatePsdThumbnail(filePath, thumbnailPath) {
       .resize(800, 800, { fit: "inside", withoutEnlargement: true })
       .webp({ quality: 85 })
       .toFile(thumbnailPath);
-    console.log(`PSD thumbnail generated successfully with Sharp: ${thumbnailPath}`);
+    console.log(
+      `PSD thumbnail generated successfully with Sharp: ${thumbnailPath}`
+    );
   } catch (sharpError) {
     console.log(
       "Sharp failed for PSD, trying ImageMagick:",
