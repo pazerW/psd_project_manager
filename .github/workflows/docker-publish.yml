@@ -13,22 +13,12 @@ on:
       - master
   workflow_dispatch:  # 允许手动触发
 
-env:
-  # 阿里云容器镜像服务配置
-  # 可选区域: cn-hangzhou, cn-shanghai, cn-beijing, cn-shenzhen 等
-  ACR_REGION: ${{ secrets.ACR_REGION || 'cn-hangzhou' }}
-  ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE || 'default-namespace' }}
-  IMAGE_NAME: psd-project-manager
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up QEMU
@@ -37,75 +27,54 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 使用AccessKey方式登录（推荐）
-      - name: Get ACR temp credentials using AccessKey
+      - name: Log in to Alibaba Cloud Container Registry
         if: github.event_name != 'pull_request'
-        id: acr-token
-        continue-on-error: true
+        env:
+          ACR_REGION: ${{ secrets.ACR_REGION || 'cn-hangzhou' }}
+          ACR_REGISTRY: registry.${{ secrets.ACR_REGION || 'cn-hangzhou' }}.aliyuncs.com
+          ACR_USERNAME: ${{ secrets.ACR_ACCESS_KEY_ID }}
+          ACR_PASSWORD: ${{ secrets.ACR_ACCESS_KEY_SECRET }}
         run: |
-          # 安装阿里云CLI
-          wget -q https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
-          tar -xzf aliyun-cli-linux-latest-amd64.tgz
-          sudo mv aliyun /usr/local/bin/
-          
-          # 配置AccessKey
-          aliyun configure set \
-            --profile akProfile \
-            --mode AK \
-            --region ${{ env.ACR_REGION }} \
-            --access-key-id ${{ secrets.ACR_ACCESS_KEY_ID }} \
-            --access-key-secret ${{ secrets.ACR_ACCESS_KEY_SECRET }}
-          
-          # 获取临时登录凭证
-          TOKEN_JSON=$(aliyun cr GET /tokens --header "Content-Type=application/json" --region ${{ env.ACR_REGION }})
-          TEMP_USER=$(echo $TOKEN_JSON | jq -r '.data.tempUserName')
-          TEMP_PASSWORD=$(echo $TOKEN_JSON | jq -r '.data.authorizationToken')
-          
-          echo "::add-mask::$TEMP_PASSWORD"
-          echo "username=$TEMP_USER" >> $GITHUB_OUTPUT
-          echo "password=$TEMP_PASSWORD" >> $GITHUB_OUTPUT
-          echo "registry=registry.${{ env.ACR_REGION }}.aliyuncs.com" >> $GITHUB_OUTPUT
-
-      - name: Log in to ACR with AccessKey token
-        if: github.event_name != 'pull_request' && steps.acr-token.outputs.username != ''
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.acr-token.outputs.registry }}
-          username: ${{ steps.acr-token.outputs.username }}
-          password: ${{ steps.acr-token.outputs.password }}
-
-      # 备用方案：使用传统用户名密码登录
-      - name: Log in to ACR with username/password
-        if: github.event_name != 'pull_request' && steps.acr-token.outcome == 'failure'
-        uses: docker/login-action@v3
-        with:
-          registry: registry.${{ env.ACR_REGION }}.aliyuncs.com
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+          echo "$ACR_PASSWORD" | docker login --username "$ACR_USERNAME" --password-stdin $ACR_REGISTRY
         continue-on-error: true
 
+      - name: Build and Push Docker image
+        if: github.event_name != 'pull_request'
+        env:
+          ACR_REGION: ${{ secrets.ACR_REGION || 'cn-hangzhou' }}
+          ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE || 'default-namespace' }}
+          IMAGE_NAME: design_project_management
+        run: |
+          REGISTRY="registry.${ACR_REGION}.aliyuncs.com"
+          FULL_IMAGE_NAME="${REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}"
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          RUN_NUMBER="${{ github.run_number }}"
+          COMMIT_SHA="${{ github.sha }}"
+          
+          echo "构建镜像..."
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            -t "${FULL_IMAGE_NAME}:latest" \
+            -t "${FULL_IMAGE_NAME}:${TIMESTAMP}" \
+            -t "${FULL_IMAGE_NAME}:${RUN_NUMBER}" \
+            -t "${FULL_IMAGE_NAME}:${COMMIT_SHA}" \
+            --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --build-arg VCS_REF="${COMMIT_SHA}" \
+            .
+          
+          echo "✓ 镜像构建并推送成功"
+          echo "镜像标签："
+          echo "  - ${FULL_IMAGE_NAME}:latest"
+          echo "  - ${FULL_IMAGE_NAME}:${TIMESTAMP}"
+          echo "  - ${FULL_IMAGE_NAME}:${RUN_NUMBER}"
+          echo "  - ${FULL_IMAGE_NAME}:${COMMIT_SHA}"
 
-
-      - name: Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          # 只有在非PR时才尝试推送（如果登录失败则会跳过推送）
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            registry.${{ env.ACR_REGION }}.aliyuncs.com/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:latest
-            registry.${{ env.ACR_REGION }}.aliyuncs.com/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.run_number }}
-            registry.${{ env.ACR_REGION }}.aliyuncs.com/${{ env.ACR_NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.repository.updated_at }}
-            VCS_REF=${{ github.sha }}
-            VERSION=${{ steps.meta.outputs.version }}
-
-      - name: Image digest
-        run: echo ${{ steps.meta.outputs.digest }}
+      - name: Build only (for PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "PR 构建 - 仅构建镜像，不推送"
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t design_project_management:pr-${{ github.event.pull_request.number }} \
+            .
