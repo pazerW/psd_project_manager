@@ -1,27 +1,32 @@
 version: '3.8'
 
 services:
-  psd-manager:
-    build: .
-    ports:
-      - "3000:3000"  # 前端 + 后端统一访问端口
-    volumes:
-      # 将本地数据目录挂载到容器内
-      - ./data:/app/data
-      # SMB挂载点示例（根据实际情况调整）
-      # - /mnt/smb/projects:/app/data
-    environment:
-      - DATA_PATH=/app/data
-      - NODE_ENV=production
+  psd-project-manager:
+    image: pazerwong/design_project_management:latest
+    container_name: psd-project-manager
     restart: unless-stopped
-    
-  # 可选：添加SMB服务器（用于测试）
-  # samba:
-  #   image: dperson/samba
-  #   ports:
-  #     - "139:139"
-  #     - "445:445"
-  #   volumes:
-  #     - ./data:/mount
-  #   command: '-s "projects;/mount;yes;no;no;all;none" -u "user;password"'
-  #   restart: unless-stopped
+    ports:
+      - "3000:3000"  # 前端 + 后端统一端口
+    environment:
+      - PUID=1000
+      - PGID=100
+    volumes:
+      # 持久化数据目录
+      - /share/data:/app/data
+      - /share/logs:/app/logs
+      # 如果需要上传文件存储
+      - /share/uploads:/app/uploads
+    networks:
+      - psd-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
+
+networks:
+  psd-network:
+    driver: bridge
