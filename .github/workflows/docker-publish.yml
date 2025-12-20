@@ -39,8 +39,9 @@ jobs:
 
       # 使用AccessKey方式登录（推荐）
       - name: Get ACR temp credentials using AccessKey
-        if: github.event_name != 'pull_request' && secrets.ACR_ACCESS_KEY_ID != '' && secrets.ACR_ACCESS_KEY_SECRET != ''
+        if: github.event_name != 'pull_request'
         id: acr-token
+        continue-on-error: true
         run: |
           # 安装阿里云CLI
           wget -q https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
@@ -75,7 +76,7 @@ jobs:
 
       # 备用方案：使用传统用户名密码登录
       - name: Log in to ACR with username/password
-        if: github.event_name != 'pull_request' && (secrets.ACR_ACCESS_KEY_ID == '' || secrets.ACR_ACCESS_KEY_SECRET == '') && secrets.ACR_USERNAME != ''
+        if: github.event_name != 'pull_request' && steps.acr-token.outcome == 'failure'
         uses: docker/login-action@v3
         with:
           registry: registry.${{ env.ACR_REGION }}.aliyuncs.com
