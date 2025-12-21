@@ -23,56 +23,45 @@
             <div v-if="!editingStatus" class="status-display">
               <span 
                 :class="`status-badge status-${taskInfo.frontmatter.status || 'pending'}`"
-                @click="startEditStatus"
-                style="cursor: pointer;"
-                title="点击编辑状态"
+                @click="canEditStatus && startEditStatus()"
+                :style="{ cursor: canEditStatus ? 'pointer' : 'default' }"
+                :title="canEditStatus ? '点击编辑状态' : '项目未定义状态列表'"
               >
                 {{ taskInfo.frontmatter.status || '待处理' }}
               </span>
               <button 
+                v-if="canEditStatus"
                 class="btn-edit-status" 
                 @click="startEditStatus"
                 title="编辑状态"
               >
                 ✏️
               </button>
+              <span 
+                v-if="!isStatusInAllowedList && taskInfo.frontmatter.status" 
+                class="status-note"
+                title="此状态未在项目README中定义，建议修改为允许的状态"
+              >
+                ⚠️ 自定义状态
+              </span>
             </div>
             <div v-else class="status-edit">
-              <div class="status-input-group">
-                <input 
-                  v-model="editingStatusText"
-                  type="text"
-                  class="status-input"
-                  placeholder="输入状态..."
-                  @keydown.enter="saveStatus"
-                  @keydown.esc="cancelEditStatus"
-                  ref="statusInput"
-                />
-                <button 
-                  class="btn-dropdown" 
-                  @click="toggleStatusDropdown"
-                  title="选择已有状态"
-                  type="button"
-                >
-                  ▼
-                </button>
-              </div>
-              <div v-if="showStatusDropdown && projectStatuses.length > 0" class="status-dropdown">
-                <div 
+              <select 
+                v-model="editingStatusText"
+                class="status-select"
+                @change="saveStatus"
+                ref="statusSelect"
+              >
+                <option value="" disabled>请选择状态</option>
+                <option 
                   v-for="status in projectStatuses" 
                   :key="status"
-                  class="status-option"
-                  @click="selectStatus(status)"
+                  :value="status"
                 >
-                  <span :class="`status-badge status-${status}`">
-                    {{ status }}
-                  </span>
-                </div>
-              </div>
+                  {{ status }}
+                </option>
+              </select>
               <div class="status-actions">
-                <button class="btn btn-sm btn-primary" @click="saveStatus">
-                  保存
-                </button>
                 <button class="btn btn-sm btn-secondary" @click="cancelEditStatus">
                   取消
                 </button>
@@ -125,29 +114,42 @@
               <div class="psd-tags">
                 <div v-if="editingTags !== file.name" class="tags-display">
                   <span v-if="file.tags" class="tags-badge">🏷️ {{ file.tags }}</span>
-                  <span v-else class="tags-placeholder" @click="startEditTags(file.name, file.tags || '')">点击添加标签...</span>
+                  <span v-else class="tags-placeholder" @click="projectTags.length > 0 && startEditTags(file.name, file.tags || '')">
+                    {{ projectTags.length > 0 ? '点击选择标签...' : '请先在项目中配置标签' }}
+                  </span>
                   <button 
+                    v-if="projectTags.length > 0"
                     class="btn-edit-tags" 
                     @click="startEditTags(file.name, file.tags || '')"
                     title="编辑标签"
                   >
                     ✏️
                   </button>
+                  <span 
+                    v-if="file.tags && !isTagInAllowedList(file.tags)" 
+                    class="status-note"
+                    title="此标签未在项目中定义，建议修改为允许的标签"
+                  >
+                    ⚠️ 自定义标签
+                  </span>
                 </div>
                 <div v-else class="tags-edit">
-                  <input 
+                  <select 
                     v-model="editingTagsText"
-                    type="text"
-                    class="tags-input-edit"
-                    placeholder="输入标签，最多10个字符"
-                    maxlength="10"
-                    @keydown.enter="saveTags(file.name)"
-                    @keydown.esc="cancelEditTags"
-                  />
+                    class="tags-select"
+                    @change="saveTags(file.name)"
+                    ref="tagsSelect"
+                  >
+                    <option value="" disabled>请选择标签</option>
+                    <option 
+                      v-for="tag in projectTags" 
+                      :key="tag"
+                      :value="tag"
+                    >
+                      {{ tag }}
+                    </option>
+                  </select>
                   <div class="tags-actions">
-                    <button class="btn btn-sm btn-primary" @click="saveTags(file.name)">
-                      保存
-                    </button>
                     <button class="btn btn-sm btn-secondary" @click="cancelEditTags">
                       取消
                     </button>
@@ -227,18 +229,25 @@
             <h4>{{ selectedFile.name }}</h4>
             <p>文件大小: {{ formatFileSize(selectedFile.size) }}</p>
             
-            <div class="upload-tags-input">
+            <div class="upload-tags-input" v-if="projectTags.length > 0">
               <label>标签（可选）：</label>
-              <input 
+              <select 
                 v-model="uploadTags"
-                type="text"
-                class="tags-input"
-                placeholder="输入标签，最多10个字符"
-                maxlength="10"
-                @input="validateTags"
+                class="tags-select-upload"
                 :disabled="uploading"
-              />
-              <p class="tags-help">{{ uploadTags.length }}/10 字符</p>
+              >
+                <option value="">不选择标签</option>
+                <option 
+                  v-for="tag in projectTags" 
+                  :key="tag"
+                  :value="tag"
+                >
+                  {{ tag }}
+                </option>
+              </select>
+            </div>
+            <div v-else class="upload-tags-warning">
+              <p class="help-text">⚠️ 项目未配置标签，请先在项目详情页配置标签</p>
             </div>
             
             <div v-if="uploading" class="progress-bar">
@@ -299,23 +308,32 @@ export default {
       editingTagsText: '', // 编辑中的标签文本
       editingStatus: false, // 是否正在编辑状态
       editingStatusText: '', // 编辑中的状态文本
-      projectStatuses: [], // 项目中已使用的所有状态
-      showStatusDropdown: false // 是否显示状态下拉列表
+      projectStatuses: [], // 项目允许的状态列表
+      projectTags: [] // 项目允许的标签列表
     }
   },
   computed: {
     renderedReadme() {
       return marked(this.taskInfo.readmeContent || '')
+    },
+    // 检查当前状态是否可以编辑
+    canEditStatus() {
+      // 只要项目定义了状态列表，就允许编辑（即使当前状态不在列表中）
+      return this.projectStatuses && this.projectStatuses.length > 0
+    },
+    // 检查当前状态是否在允许列表中
+    isStatusInAllowedList() {
+      const currentStatus = this.taskInfo.frontmatter?.status
+      if (!currentStatus) {
+        return true
+      }
+      return this.projectStatuses.includes(currentStatus)
     }
   },
   async mounted() {
     await this.loadTaskDetail()
-    // 添加全局点击事件监听，用于关闭下拉列表
-    document.addEventListener('click', this.handleClickOutside)
   },
   beforeUnmount() {
-    // 移除全局点击事件监听
-    document.removeEventListener('click', this.handleClickOutside)
   },
   watch: {
     taskName: {
@@ -324,6 +342,14 @@ export default {
     }
   },
   methods: {
+    // 检查标签是否在允许列表中
+    isTagInAllowedList(tag) {
+      if (!tag || this.projectTags.length === 0) {
+        return true
+      }
+      return this.projectTags.includes(tag)
+    },
+    
     async loadTaskDetail() {
       this.loading = true
       try {
@@ -337,6 +363,9 @@ export default {
         
         // 加载项目中所有已使用的状态
         await this.loadProjectStatuses()
+        
+        // 加载项目中配置的标签
+        await this.loadProjectTags()
         
       } catch (error) {
         console.error('Failed to load task detail:', error)
@@ -355,14 +384,28 @@ export default {
       }
     },
     
+    async loadProjectTags() {
+      try {
+        const response = await axios.get(`/api/projects/${this.projectName}`)
+        if (response.data.allowedTags && Array.isArray(response.data.allowedTags)) {
+          this.projectTags = response.data.allowedTags
+        }
+      } catch (error) {
+        console.error('Failed to load project tags:', error)
+        this.projectTags = []
+      }
+    },
+    
     startEditStatus() {
+      if (!this.canEditStatus) {
+        return
+      }
       this.editingStatus = true
       this.editingStatusText = this.taskInfo.frontmatter?.status || ''
-      this.showStatusDropdown = false
-      // 等待DOM更新后聚焦输入框
+      // 等待DOM更新后聚焦选择框
       this.$nextTick(() => {
-        if (this.$refs.statusInput) {
-          this.$refs.statusInput.focus()
+        if (this.$refs.statusSelect) {
+          this.$refs.statusSelect.focus()
         }
       })
     },
@@ -370,29 +413,11 @@ export default {
     cancelEditStatus() {
       this.editingStatus = false
       this.editingStatusText = ''
-      this.showStatusDropdown = false
-    },
-    
-    selectStatus(status) {
-      this.editingStatusText = status
-      this.showStatusDropdown = false
-    },
-    
-    toggleStatusDropdown() {
-      this.showStatusDropdown = !this.showStatusDropdown
-    },
-    
-    handleClickOutside(event) {
-      // 如果点击在状态编辑区域外，关闭下拉列表
-      const statusEdit = this.$el?.querySelector('.status-edit')
-      if (statusEdit && !statusEdit.contains(event.target)) {
-        this.showStatusDropdown = false
-      }
     },
     
     async saveStatus() {
       if (!this.editingStatusText.trim()) {
-        alert('状态不能为空')
+        alert('请选择一个状态')
         return
       }
       
@@ -407,9 +432,6 @@ export default {
           this.taskInfo.frontmatter = {}
         }
         this.taskInfo.frontmatter.status = this.editingStatusText.trim()
-        
-        // 重新加载项目状态列表
-        await this.loadProjectStatuses()
         
         this.cancelEditStatus()
       } catch (error) {
@@ -595,8 +617,18 @@ export default {
 
     // 标签编辑相关方法
     startEditTags(fileName, currentTags) {
+      if (this.projectTags.length === 0) {
+        alert('项目未配置标签，请先在项目详情页配置标签')
+        return
+      }
       this.editingTags = fileName
       this.editingTagsText = currentTags
+      // 等待DOM更新后聚焦选择框
+      this.$nextTick(() => {
+        if (this.$refs.tagsSelect) {
+          this.$refs.tagsSelect.focus()
+        }
+      })
     },
 
     cancelEditTags() {
@@ -605,9 +637,13 @@ export default {
     },
 
     async saveTags(fileName) {
+      if (!this.editingTagsText || !this.editingTagsText.trim()) {
+        alert('请选择一个标签')
+        return
+      }
+      
       try {
-        // 验证标签
-        const tags = this.editingTagsText.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s，。、！？—]+/g, '').trim()
+        const tags = this.editingTagsText.trim()
         
         await axios.put(
           `/api/tasks/${this.projectName}/${this.taskName}/files/${fileName}/tags`,
@@ -841,14 +877,18 @@ export default {
   gap: 0.5rem;
 }
 
-.tags-input-edit {
+.tags-input-edit,
+.tags-select {
   padding: 0.375rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 0.875rem;
+  width: 100%;
+  background: white;
 }
 
-.tags-input-edit:focus {
+.tags-input-edit:focus,
+.tags-select:focus {
   outline: none;
   border-color: #007bff;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
@@ -871,6 +911,39 @@ export default {
   margin-bottom: 0.5rem;
   font-weight: 500;
   color: #495057;
+}
+
+.tags-select-upload {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+.tags-select-upload:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.tags-select-upload:disabled {
+  background: #e9ecef;
+  cursor: not-allowed;
+}
+
+.upload-tags-warning {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+}
+
+.upload-tags-warning .help-text {
+  margin: 0;
+  color: #856404;
 }
 
 .tags-input {
@@ -1028,6 +1101,17 @@ export default {
   color: white;
 }
 
+.status-cancelled {
+  background: #6c757d;
+  color: white;
+}
+
+.status-note {
+  font-size: 0.75rem;
+  color: #dc3545;
+  font-style: italic;
+}
+
 .btn-edit-status {
   background: none;
   border: none;
@@ -1048,62 +1132,20 @@ export default {
   position: relative;
 }
 
-.status-input-group {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.status-input {
-  flex: 1;
-  padding: 0.375rem 0.75rem;
+.status-select {
+  padding: 0.375rem 2rem 0.375rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 0.875rem;
+  background: white;
+  cursor: pointer;
+  min-width: 150px;
 }
 
-.status-input:focus {
+.status-select:focus {
   outline: none;
   border-color: #007bff;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-}
-
-.btn-dropdown {
-  padding: 0.375rem 0.5rem;
-  background: #f8f9fa;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.7rem;
-  transition: background 0.2s;
-}
-
-.btn-dropdown:hover {
-  background: #e9ecef;
-}
-
-.status-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 0.25rem;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: 10;
-}
-
-.status-option {
-  padding: 0.5rem 0.75rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.status-option:hover {
-  background: #f8f9fa;
 }
 
 .status-actions {

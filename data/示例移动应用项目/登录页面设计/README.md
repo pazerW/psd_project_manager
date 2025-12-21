@@ -1,5 +1,5 @@
 ---
-status: active
+status: new-status
 priority: high
 prompt: 设计一个简洁现代的登录界面，包含用户名密码输入框、登录按钮和忘记密码链接
 assignee: UI设计师

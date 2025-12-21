@@ -24,6 +24,8 @@ async function ensureReadme(dirPath, name, type = "project") {
 title: ${name}
 created: ${timestamp}
 status: active
+allowedStatuses: ["pending", "in-progress", "review", "completed", "cancelled"]
+allowedTags: ["初稿", "定稿", "客户审核", "最终版"]
 ---
 
 # ${name}
@@ -36,6 +38,23 @@ status: active
 ## 项目描述
 
 <!-- 在这里添加项目描述 -->
+
+## 任务状态说明
+
+本项目支持以下任务状态（在上方 allowedStatuses 中定义）：
+- **pending**: 待处理
+- **in-progress**: 进行中
+- **review**: 审核中
+- **completed**: 已完成
+- **cancelled**: 已取消
+
+## 文件标签说明
+
+本项目支持以下文件标签（在上方 allowedTags 中定义）：
+- **初稿**: 设计初稿
+- **定稿**: 设计定稿
+- **客户审核**: 提交客户审核的版本
+- **最终版**: 最终确认版本
 
 ## 任务列表
 
@@ -91,6 +110,74 @@ router.get("/", async (req, res) => {
     }
 
     res.json(projects);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 更新项目的允许状态列表（必须在 /:projectName 之前）
+router.put("/:projectName/allowed-statuses", async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const { allowedStatuses } = req.body;
+    
+    if (!Array.isArray(allowedStatuses) || allowedStatuses.length === 0) {
+      return res.status(400).json({ error: "allowedStatuses must be a non-empty array" });
+    }
+    
+    const projectPath = path.join(req.dataPath, projectName);
+    const readmePath = path.join(projectPath, "README.md");
+    
+    if (!(await fs.pathExists(readmePath))) {
+      return res.status(404).json({ error: "Project README not found" });
+    }
+    
+    // 读取现有内容
+    const content = await fs.readFile(readmePath, "utf8");
+    const parsed = matter(content);
+    
+    // 更新 allowedStatuses
+    parsed.data.allowedStatuses = allowedStatuses;
+    
+    // 写回文件
+    const updated = matter.stringify(parsed.content, parsed.data);
+    await fs.writeFile(readmePath, updated, "utf8");
+    
+    res.json({ success: true, allowedStatuses });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 更新项目的允许标签列表
+router.put("/:projectName/allowed-tags", async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const { allowedTags } = req.body;
+    
+    if (!Array.isArray(allowedTags) || allowedTags.length === 0) {
+      return res.status(400).json({ error: "allowedTags must be a non-empty array" });
+    }
+    
+    const projectPath = path.join(req.dataPath, projectName);
+    const readmePath = path.join(projectPath, "README.md");
+    
+    if (!(await fs.pathExists(readmePath))) {
+      return res.status(404).json({ error: "Project README not found" });
+    }
+    
+    // 读取现有内容
+    const content = await fs.readFile(readmePath, "utf8");
+    const parsed = matter(content);
+    
+    // 更新 allowedTags
+    parsed.data.allowedTags = allowedTags;
+    
+    // 写回文件
+    const updated = matter.stringify(parsed.content, parsed.data);
+    await fs.writeFile(readmePath, updated, "utf8");
+    
+    res.json({ success: true, allowedTags });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

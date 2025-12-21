@@ -284,6 +284,22 @@ router.get("/:projectName/statuses/list", async (req, res) => {
       return res.status(404).json({ error: "Project not found" });
     }
 
+    // 首先尝试从项目 README 中读取定义的状态列表
+    const projectReadmePath = path.join(projectPath, "README.md");
+    if (await fs.pathExists(projectReadmePath)) {
+      const content = await fs.readFile(projectReadmePath, "utf8");
+      const parsed = matter(content);
+
+      // 如果项目 README 中定义了 allowedStatuses，则使用它
+      if (
+        parsed.data.allowedStatuses &&
+        Array.isArray(parsed.data.allowedStatuses)
+      ) {
+        return res.json(parsed.data.allowedStatuses);
+      }
+    }
+
+    // 如果项目 README 中没有定义状态列表，则收集所有已使用的状态
     const statusSet = new Set();
     const items = await fs.readdir(projectPath, { withFileTypes: true });
 

@@ -34,3 +34,5 @@ coverage/
 
 # 生产构建输出
 backend/public/
+
+docker_compose_local.yml

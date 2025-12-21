@@ -1,7 +1,15 @@
 ---
 status: active
-description: "移动应用设计项目，包含用户界面和交互设计"
+description: 移动应用设计项目，包含用户界面和交互设计
 priority: high
+allowedStatuses:
+  - completed
+  - new-status
+allowedTags:
+  - 初稿
+  - 定稿
+  - 客户审核
+  - 最终版
 ---
 
 # 移动应用项目

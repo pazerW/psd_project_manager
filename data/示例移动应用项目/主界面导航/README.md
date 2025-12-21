@@ -1,8 +1,8 @@
 ---
-status: end
+status: completed
 priority: medium
-prompt: "设计应用的主界面，包含底部导航栏和主要功能区域"
-assignee: "UI设计师"
+prompt: 设计应用的主界面，包含底部导航栏和主要功能区域
+assignee: UI设计师
 ---
 
 # 主界面导航设计
