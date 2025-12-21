@@ -2,10 +2,15 @@
   <div class="project-detail">
     <div class="page-header">
       <h2>{{ projectName }}</h2>
-      <div v-if="projectInfo" class="project-meta">
-        <span :class="`status-badge status-${projectInfo.status}`">
-          {{ projectInfo.status }}
-        </span>
+      <div class="header-actions">
+        <button class="btn btn-download" @click="showDownloadDialog = true">
+          📦 按标签下载
+        </button>
+        <div v-if="projectInfo" class="project-meta">
+          <span :class="`status-badge status-${projectInfo.status}`">
+            {{ projectInfo.status }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -74,6 +79,52 @@
         </p>
       </div>
     </div>
+
+    <!-- 按标签下载对话框 -->
+    <div v-if="showDownloadDialog" class="download-modal" @click.self="showDownloadDialog = false">
+      <div class="download-dialog">
+        <h3>按标签批量下载</h3>
+        
+        <div v-if="loadingTags" class="loading-tags">
+          加载标签中...
+        </div>
+        
+        <div v-else-if="availableTags.length === 0" class="no-tags">
+          <p>项目中暂无标签</p>
+          <p class="help-text">请先为文件添加标签</p>
+        </div>
+        
+        <div v-else class="tags-list">
+          <div 
+            v-for="tag in availableTags" 
+            :key="tag"
+            class="tag-item"
+            @click="selectTag(tag)"
+          >
+            <div class="tag-info">
+              <span class="tag-label">🏷️ {{ tag }}</span>
+              <span v-if="selectedTag === tag" class="tag-count">
+                {{ tagFileCount }} 个文件
+              </span>
+            </div>
+            <button 
+              v-if="selectedTag === tag" 
+              class="btn btn-primary btn-sm"
+              @click.stop="downloadByTag(tag)"
+              :disabled="downloading"
+            >
+              {{ downloading ? '下载中...' : '下载' }}
+            </button>
+          </div>
+        </div>
+        
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" @click="showDownloadDialog = false">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -88,7 +139,13 @@ export default {
       allTasks: [],
       projectInfo: null,
       loading: true,
-      selectedStatus: 'all'
+      selectedStatus: 'all',
+      showDownloadDialog: false,
+      availableTags: [],
+      loadingTags: false,
+      selectedTag: null,
+      tagFileCount: 0,
+      downloading: false
     }
   },
   computed: {
@@ -110,6 +167,14 @@ export default {
     projectName: {
       handler: 'loadProject',
       immediate: false
+    },
+    showDownloadDialog(newVal) {
+      if (newVal) {
+        this.loadAvailableTags()
+      } else {
+        this.selectedTag = null
+        this.tagFileCount = 0
+      }
     }
   },
   methods: {
@@ -136,6 +201,60 @@ export default {
     
     getStatusCount(status) {
       return this.allTasks.filter(task => task.status === status).length
+    },
+    
+    async loadAvailableTags() {
+      this.loadingTags = true
+      try {
+        const response = await axios.get(`/api/download/tags/${this.projectName}`)
+        this.availableTags = response.data
+      } catch (error) {
+        console.error('加载标签失败:', error)
+        alert('加载标签失败：' + (error.response?.data?.error || error.message))
+      } finally {
+        this.loadingTags = false
+      }
+    },
+    
+    async selectTag(tag) {
+      this.selectedTag = tag
+      try {
+        const response = await axios.get(`/api/download/files-by-tag/${this.projectName}/${tag}`)
+        this.tagFileCount = response.data.length
+      } catch (error) {
+        console.error('获取标签文件数失败:', error)
+        this.tagFileCount = 0
+      }
+    },
+    
+    async downloadByTag(tag) {
+      this.downloading = true
+      try {
+        const response = await axios.get(
+          `/api/download/download-by-tag/${this.projectName}/${tag}`,
+          { responseType: 'blob' }
+        )
+        
+        // 创建下载链接
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `${this.projectName}_${tag}_${Date.now()}.zip`)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        // 下载成功后关闭对话框
+        setTimeout(() => {
+          this.showDownloadDialog = false
+        }, 500)
+      } catch (error) {
+        console.error('下载失败:', error)
+        alert('下载失败：' + (error.response?.data?.error || error.message))
+      } finally {
+        this.downloading = false
+      }
     }
   }
 }
@@ -339,5 +458,126 @@ export default {
 .filter-paused.active {
   background: #dc3545;
   border-color: #dc3545;
+}
+
+/* 头部操作按钮 */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn-download {
+  padding: 0.5rem 1rem;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.btn-download:hover {
+  background: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* 下载对话框样式 */
+.download-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.download-dialog {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.download-dialog h3 {
+  margin: 0 0 1.5rem 0;
+  color: #2c3e50;
+}
+
+.loading-tags {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.no-tags {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.no-tags .help-text {
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  opacity: 0.8;
+}
+
+.tags-list {
+  margin-bottom: 1.5rem;
+}
+
+.tag-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border: 2px solid #e5e5e5;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tag-item:hover {
+  border-color: #007bff;
+  background: #f8f9fa;
+}
+
+.tag-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tag-label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.tag-count {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.dialog-actions {
+  border-top: 1px solid #e5e5e5;
+  padding-top: 1rem;
+  text-align: right;
 }
 </style>

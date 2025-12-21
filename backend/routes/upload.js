@@ -64,6 +64,7 @@ router.post(
         chunkFiles: [], // 存储分片文件名
         uploadId,
         timestamp: Date.now(),
+        tags: req.body.tags || "", // 添加标签信息
       };
 
       const infoPath = path.join(req.dataPath, ".temp", `${uploadId}.json`);
@@ -226,12 +227,25 @@ async function mergeChunks(dataPath, uploadInfo) {
 
     // 文件合并完成后，异步预生成缩略图（不阻塞响应）
     const finalFileName = uploadInfo.renamedFileName || fileName;
+    const tags = uploadInfo.tags || "";
     setImmediate(() => {
       pregen缩略图(dataPath, projectName, taskName, finalFileName).catch(
         (err) => {
           console.error("缩略图预生成失败:", err.message);
         }
       );
+      // 如果有标签，保存到README
+      if (tags) {
+        saveFileTagsToReadme(
+          dataPath,
+          projectName,
+          taskName,
+          finalFileName,
+          tags
+        ).catch((err) => {
+          console.error("保存标签失败:", err.message);
+        });
+      }
     });
   } catch (error) {
     writeStream.destroy();
@@ -391,6 +405,48 @@ async function cleanupTempFiles(dataPath, uploadId) {
     }
   } catch (error) {
     console.error("Error cleaning up temp files:", error);
+  }
+}
+
+// 保存文件标签到README
+async function saveFileTagsToReadme(
+  dataPath,
+  projectName,
+  taskName,
+  fileName,
+  tags
+) {
+  const taskPath = path.join(dataPath, projectName, taskName);
+  const readmePath = path.join(taskPath, "README.md");
+
+  try {
+    const matter = require("gray-matter");
+    let content = "";
+    let frontmatter = {};
+
+    if (await fs.pathExists(readmePath)) {
+      const fileContent = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(fileContent);
+      content = parsed.content;
+      frontmatter = parsed.data;
+    }
+
+    // 初始化fileTags对象
+    if (!frontmatter.fileTags) {
+      frontmatter.fileTags = {};
+    }
+
+    // 保存标签
+    frontmatter.fileTags[fileName] = tags;
+
+    // 重新组合README内容
+    const newContent = matter.stringify(content, frontmatter);
+    await fs.writeFile(readmePath, newContent, "utf8");
+
+    console.log(`已保存文件 ${fileName} 的标签: ${tags}`);
+  } catch (error) {
+    console.error("保存文件标签失败:", error);
+    throw error;
   }
 }
 

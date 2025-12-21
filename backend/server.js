@@ -8,6 +8,7 @@ const taskRoutes = require("./routes/tasks");
 const uploadRoutes = require("./routes/upload");
 const psdRoutes = require("./routes/psd");
 const fileRoutes = require("./routes/files");
+const downloadRoutes = require("./routes/download");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +36,7 @@ app.use("/api/tasks", taskRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/psd", psdRoutes); // 保留向后兼容
 app.use("/api/files", fileRoutes); // 新的通用文件路由
+app.use("/api/download", downloadRoutes); // 下载路由
 
 // 静态文件服务（用于提供生成的缩略图）
 app.use("/thumbnails", express.static(path.join(DATA_PATH, ".thumbnails")));

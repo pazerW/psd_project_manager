@@ -121,6 +121,40 @@
               <p class="file-size">{{ formatFileSize(file.size) }}</p>
               <p class="file-date">{{ formatDate(file.modified) }}</p>
               
+              <!-- 文件标签 -->
+              <div class="psd-tags">
+                <div v-if="editingTags !== file.name" class="tags-display">
+                  <span v-if="file.tags" class="tags-badge">🏷️ {{ file.tags }}</span>
+                  <span v-else class="tags-placeholder" @click="startEditTags(file.name, file.tags || '')">点击添加标签...</span>
+                  <button 
+                    class="btn-edit-tags" 
+                    @click="startEditTags(file.name, file.tags || '')"
+                    title="编辑标签"
+                  >
+                    ✏️
+                  </button>
+                </div>
+                <div v-else class="tags-edit">
+                  <input 
+                    v-model="editingTagsText"
+                    type="text"
+                    class="tags-input-edit"
+                    placeholder="输入标签，最多10个字符"
+                    maxlength="10"
+                    @keydown.enter="saveTags(file.name)"
+                    @keydown.esc="cancelEditTags"
+                  />
+                  <div class="tags-actions">
+                    <button class="btn btn-sm btn-primary" @click="saveTags(file.name)">
+                      保存
+                    </button>
+                    <button class="btn btn-sm btn-secondary" @click="cancelEditTags">
+                      取消
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
               <!-- 文件描述 -->
               <div class="psd-description">
                 <div v-if="editingDescription !== file.name" class="description-display">
@@ -193,6 +227,20 @@
             <h4>{{ selectedFile.name }}</h4>
             <p>文件大小: {{ formatFileSize(selectedFile.size) }}</p>
             
+            <div class="upload-tags-input">
+              <label>标签（可选）：</label>
+              <input 
+                v-model="uploadTags"
+                type="text"
+                class="tags-input"
+                placeholder="输入标签，最多10个字符"
+                maxlength="10"
+                @input="validateTags"
+                :disabled="uploading"
+              />
+              <p class="tags-help">{{ uploadTags.length }}/10 字符</p>
+            </div>
+            
             <div v-if="uploading" class="progress-bar">
               <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
             </div>
@@ -244,8 +292,11 @@ export default {
       uploading: false,
       uploadProgress: 0,
       uploadId: null,
+      uploadTags: '', // 上传时的标签
       editingDescription: null, // 正在编辑描述的文件名
       editingDescriptionText: '', // 编辑中的描述文本
+      editingTags: null, // 正在编辑标签的文件名
+      editingTagsText: '', // 编辑中的标签文本
       editingStatus: false, // 是否正在编辑状态
       editingStatusText: '', // 编辑中的状态文本
       projectStatuses: [], // 项目中已使用的所有状态
@@ -434,6 +485,11 @@ export default {
         formData.append('fileName', this.selectedFile.name)
         formData.append('fileSize', this.selectedFile.size.toString())
         
+        // 添加标签信息
+        if (this.uploadTags.trim()) {
+          formData.append('tags', this.uploadTags.trim())
+        }
+        
         await axios.post(
           `/api/upload/chunk/${this.projectName}/${this.taskName}`,
           formData,
@@ -465,6 +521,7 @@ export default {
       this.uploading = false
       this.uploadProgress = 0
       this.uploadId = null
+      this.uploadTags = ''
       this.showUpload = false
     },
     
@@ -527,6 +584,46 @@ export default {
         this.cancelEditDescription()
       } catch (error) {
         console.error('保存描述失败:', error)
+      }
+    },
+
+    // 标签验证
+    validateTags() {
+      // 移除非法字符（保留中文、英文、数字、空格、常用标点）
+      this.uploadTags = this.uploadTags.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s，。、！？—]+/g, '')
+    },
+
+    // 标签编辑相关方法
+    startEditTags(fileName, currentTags) {
+      this.editingTags = fileName
+      this.editingTagsText = currentTags
+    },
+
+    cancelEditTags() {
+      this.editingTags = null
+      this.editingTagsText = ''
+    },
+
+    async saveTags(fileName) {
+      try {
+        // 验证标签
+        const tags = this.editingTagsText.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s，。、！？—]+/g, '').trim()
+        
+        await axios.put(
+          `/api/tasks/${this.projectName}/${this.taskName}/files/${fileName}/tags`,
+          { tags }
+        )
+        
+        // 更新本地数据
+        const fileIndex = this.psdFiles.findIndex(f => f.name === fileName)
+        if (fileIndex !== -1) {
+          this.psdFiles[fileIndex].tags = tags
+        }
+        
+        this.cancelEditTags()
+      } catch (error) {
+        console.error('保存标签失败:', error)
+        alert('保存标签失败：' + (error.response?.data?.error || error.message))
       }
     },
 
@@ -689,6 +786,116 @@ export default {
   margin-top: 1rem;
   display: flex;
   gap: 0.5rem;
+}
+
+/* PSD文件标签样式 */
+.psd-tags {
+  margin: 0.5rem 0;
+}
+
+.tags-display {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tags-badge {
+  padding: 0.25rem 0.5rem;
+  background: #e7f3ff;
+  color: #0066cc;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  display: inline-block;
+}
+
+.tags-placeholder {
+  padding: 0.25rem 0.5rem;
+  color: #6c757d;
+  font-size: 0.85rem;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.tags-placeholder:hover {
+  color: #007bff;
+}
+
+.btn-edit-tags {
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 0.8rem;
+  padding: 0.25rem;
+}
+
+.tags-display:hover .btn-edit-tags {
+  opacity: 1;
+}
+
+.tags-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tags-input-edit {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.tags-input-edit:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.tags-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.upload-tags-input {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.upload-tags-input label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #495057;
+}
+
+.tags-input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.tags-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.tags-input:disabled {
+  background: #e9ecef;
+  cursor: not-allowed;
+}
+
+.tags-help {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.8rem;
+  color: #6c757d;
 }
 
 /* PSD文件描述样式 */

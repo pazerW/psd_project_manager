@@ -104,6 +104,15 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
       return res.status(404).json({ error: "Task not found" });
     }
 
+    // 读取README获取标签信息
+    let fileTags = {};
+    const readmePath = path.join(taskPath, "README.md");
+    if (await fs.pathExists(readmePath)) {
+      const content = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(content);
+      fileTags = parsed.data.fileTags || {};
+    }
+
     const files = await fs.readdir(taskPath);
     const designFiles = [];
     const validExtensions = [
@@ -133,6 +142,7 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
           type: getFileType(ext),
           downloadUrl: `/api/files/download/${projectName}/${taskName}/${file}`,
           thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${file}`,
+          tags: fileTags[file] || "", // 添加标签
         });
       }
     }
@@ -165,6 +175,20 @@ router.put(
     }
   }
 );
+
+// 更新文件标签
+router.put("/:projectName/:taskName/files/:fileName/tags", async (req, res) => {
+  try {
+    const { projectName, taskName, fileName } = req.params;
+    const { tags } = req.body;
+
+    await updateFileTags(req.dataPath, projectName, taskName, fileName, tags);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // 更新PSD文件描述（保留向后兼容）
 router.put(
@@ -229,7 +253,7 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
     // 读取现有README
     let content = "";
     let frontmatter = {};
-    
+
     if (await fs.pathExists(readmePath)) {
       const fileContent = await fs.readFile(readmePath, "utf8");
       const parsed = matter(fileContent);
@@ -267,11 +291,11 @@ router.get("/:projectName/statuses/list", async (req, res) => {
       if (item.isDirectory() && !item.name.startsWith(".")) {
         const taskPath = path.join(projectPath, item.name);
         const readmePath = path.join(taskPath, "README.md");
-        
+
         if (await fs.pathExists(readmePath)) {
           const content = await fs.readFile(readmePath, "utf8");
           const parsed = matter(content);
-          
+
           if (parsed.data.status) {
             statusSet.add(parsed.data.status);
           }
@@ -304,6 +328,7 @@ async function analyzeTaskDetails(taskPath, taskName, projectName) {
     // 获取设计文件信息
     const files = await fs.readdir(taskPath);
     const psdDescriptions = getPsdDescriptionsFromReadme(readmeContent);
+    const fileTags = frontmatter.fileTags || {}; // 从frontmatter获取标签
     const validExtensions = [
       ".psd",
       ".ai",
@@ -332,6 +357,7 @@ async function analyzeTaskDetails(taskPath, taskName, projectName) {
           downloadUrl: `/api/files/download/${projectName}/${taskName}/${file}`,
           thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${file}`,
           description: psdDescriptions[file] || "",
+          tags: fileTags[file] || "", // 添加标签
         });
       }
     }
@@ -473,6 +499,45 @@ function updatePsdSectionInReadme(content, fileName, description) {
   }
 
   return lines.join("\n");
+}
+
+// 更新文件标签
+async function updateFileTags(dataPath, projectName, taskName, fileName, tags) {
+  const taskPath = path.join(dataPath, projectName, taskName);
+  const readmePath = path.join(taskPath, "README.md");
+
+  try {
+    let content = "";
+    let frontmatter = {};
+
+    if (await fs.pathExists(readmePath)) {
+      const fileContent = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(fileContent);
+      content = parsed.content;
+      frontmatter = parsed.data;
+    }
+
+    // 初始化fileTags对象
+    if (!frontmatter.fileTags) {
+      frontmatter.fileTags = {};
+    }
+
+    // 保存或删除标签
+    if (tags && tags.trim()) {
+      frontmatter.fileTags[fileName] = tags.trim();
+    } else {
+      delete frontmatter.fileTags[fileName];
+    }
+
+    // 重新组合README内容
+    const newContent = matter.stringify(content, frontmatter);
+    await fs.writeFile(readmePath, newContent, "utf8");
+
+    console.log(`已更新文件 ${fileName} 的标签: ${tags}`);
+  } catch (error) {
+    console.error("更新文件标签失败:", error);
+    throw error;
+  }
 }
 
 // 获取文件类型
