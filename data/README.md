@@ -1,3 +1,36 @@
+---
+projectStatuses:
+  - value: active
+    label: active
+  - value: pending
+    label: pending
+  - value: in-progress
+    label: in-progress
+  - value: review
+    label: review
+  - value: completed
+    label: completed
+  - value: cancelled
+    label: cancelled
+  - value: paused
+    label: paused
+statusOrder:
+  - value: active
+    label: active
+  - value: in-progress
+    label: in-progress
+  - value: review
+    label: review
+  - value: pending
+    label: pending
+  - value: paused
+    label: paused
+  - value: completed
+    label: completed
+  - value: cancelled
+    label: cancelled
+---
+
 # 示例数据目录结构
 
 这个目录演示了PSD项目管理系统的推荐目录结构。

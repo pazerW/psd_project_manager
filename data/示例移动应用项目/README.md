@@ -1,5 +1,5 @@
 ---
-status: active
+status: 测试
 description: 移动应用设计项目，包含用户界面和交互设计
 priority: high
 allowedStatuses:

@@ -115,35 +115,152 @@ router.get("/", async (req, res) => {
   }
 });
 
+// 获取全局状态配置
+router.get("/config/statuses", async (req, res) => {
+  try {
+    const dataPath = req.dataPath;
+    const readmePath = path.join(dataPath, "README.md");
+
+    if (!(await fs.pathExists(readmePath))) {
+      // 如果不存在，返回默认配置
+      return res.json({
+        projectStatuses: [
+          { value: "active", label: "active" },
+          { value: "pending", label: "pending" },
+          { value: "in-progress", label: "in-progress" },
+          { value: "review", label: "review" },
+          { value: "completed", label: "completed" },
+          { value: "cancelled", label: "cancelled" },
+          { value: "paused", label: "paused" },
+        ],
+        statusOrder: [
+          { value: "active", label: "active" },
+          { value: "in-progress", label: "in-progress" },
+          { value: "review", label: "review" },
+          { value: "pending", label: "pending" },
+          { value: "paused", label: "paused" },
+          { value: "completed", label: "completed" },
+          { value: "cancelled", label: "cancelled" },
+        ],
+      });
+    }
+
+    const content = await fs.readFile(readmePath, "utf8");
+    const parsed = matter(content);
+
+    res.json({
+      projectStatuses: parsed.data.projectStatuses || [],
+      statusOrder: parsed.data.statusOrder || [],
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 更新全局状态配置
+router.put("/config/statuses", async (req, res) => {
+  try {
+    const dataPath = req.dataPath;
+    const readmePath = path.join(dataPath, "README.md");
+    const { projectStatuses, statusOrder } = req.body;
+
+    if (!Array.isArray(projectStatuses) || !Array.isArray(statusOrder)) {
+      return res
+        .status(400)
+        .json({ error: "projectStatuses and statusOrder must be arrays" });
+    }
+
+    let content = "";
+    let parsed;
+
+    if (await fs.pathExists(readmePath)) {
+      content = await fs.readFile(readmePath, "utf8");
+      parsed = matter(content);
+    } else {
+      parsed = { content: "# 数据目录\n\n项目数据存储目录。", data: {} };
+    }
+
+    // 更新配置
+    parsed.data.projectStatuses = projectStatuses;
+    parsed.data.statusOrder = statusOrder;
+
+    // 写回文件
+    const updated = matter.stringify(parsed.content, parsed.data);
+    await fs.writeFile(readmePath, updated, "utf8");
+
+    res.json({ success: true, projectStatuses, statusOrder });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 更新项目的允许状态列表（必须在 /:projectName 之前）
 router.put("/:projectName/allowed-statuses", async (req, res) => {
   try {
     const { projectName } = req.params;
     const { allowedStatuses } = req.body;
-    
+
     if (!Array.isArray(allowedStatuses) || allowedStatuses.length === 0) {
-      return res.status(400).json({ error: "allowedStatuses must be a non-empty array" });
+      return res
+        .status(400)
+        .json({ error: "allowedStatuses must be a non-empty array" });
     }
-    
+
     const projectPath = path.join(req.dataPath, projectName);
     const readmePath = path.join(projectPath, "README.md");
-    
+
     if (!(await fs.pathExists(readmePath))) {
       return res.status(404).json({ error: "Project README not found" });
     }
-    
+
     // 读取现有内容
     const content = await fs.readFile(readmePath, "utf8");
     const parsed = matter(content);
-    
+
     // 更新 allowedStatuses
     parsed.data.allowedStatuses = allowedStatuses;
-    
+
     // 写回文件
     const updated = matter.stringify(parsed.content, parsed.data);
     await fs.writeFile(readmePath, updated, "utf8");
-    
+
     res.json({ success: true, allowedStatuses });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 更新项目状态
+router.put("/:projectName/status", async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const { status } = req.body;
+
+    if (!status || typeof status !== "string") {
+      return res
+        .status(400)
+        .json({ error: "status must be a non-empty string" });
+    }
+
+    const projectPath = path.join(req.dataPath, projectName);
+    const readmePath = path.join(projectPath, "README.md");
+
+    if (!(await fs.pathExists(readmePath))) {
+      return res.status(404).json({ error: "Project README not found" });
+    }
+
+    // 读取现有内容
+    const content = await fs.readFile(readmePath, "utf8");
+    const parsed = matter(content);
+
+    // 更新状态
+    parsed.data.status = status;
+
+    // 写回文件
+    const updated = matter.stringify(parsed.content, parsed.data);
+    await fs.writeFile(readmePath, updated, "utf8");
+
+    res.json({ success: true, status });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -154,29 +271,31 @@ router.put("/:projectName/allowed-tags", async (req, res) => {
   try {
     const { projectName } = req.params;
     const { allowedTags } = req.body;
-    
+
     if (!Array.isArray(allowedTags) || allowedTags.length === 0) {
-      return res.status(400).json({ error: "allowedTags must be a non-empty array" });
+      return res
+        .status(400)
+        .json({ error: "allowedTags must be a non-empty array" });
     }
-    
+
     const projectPath = path.join(req.dataPath, projectName);
     const readmePath = path.join(projectPath, "README.md");
-    
+
     if (!(await fs.pathExists(readmePath))) {
       return res.status(404).json({ error: "Project README not found" });
     }
-    
+
     // 读取现有内容
     const content = await fs.readFile(readmePath, "utf8");
     const parsed = matter(content);
-    
+
     // 更新 allowedTags
     parsed.data.allowedTags = allowedTags;
-    
+
     // 写回文件
     const updated = matter.stringify(parsed.content, parsed.data);
     await fs.writeFile(readmePath, updated, "utf8");
-    
+
     res.json({ success: true, allowedTags });
   } catch (error) {
     res.status(500).json({ error: error.message });

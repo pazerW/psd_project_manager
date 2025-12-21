@@ -23,19 +23,16 @@
             <div v-if="!editingStatus" class="status-display">
               <span 
                 :class="`status-badge status-${taskInfo.frontmatter.status || 'pending'}`"
-                @click="canEditStatus && startEditStatus()"
-                :style="{ cursor: canEditStatus ? 'pointer' : 'default' }"
-                :title="canEditStatus ? '点击编辑状态' : '项目未定义状态列表'"
               >
                 {{ taskInfo.frontmatter.status || '待处理' }}
               </span>
               <button 
                 v-if="canEditStatus"
-                class="btn-edit-status" 
+                class="btn btn-change-status" 
                 @click="startEditStatus"
-                title="编辑状态"
               >
-                ✏️
+                <span class="btn-icon">✏️</span>
+                <span class="btn-text">更改状态</span>
               </button>
               <span 
                 v-if="!isStatusInAllowedList && taskInfo.frontmatter.status" 
@@ -46,23 +43,18 @@
               </span>
             </div>
             <div v-else class="status-edit">
-              <select 
-                v-model="editingStatusText"
-                class="status-select"
-                @change="saveStatus"
-                ref="statusSelect"
-              >
-                <option value="" disabled>请选择状态</option>
-                <option 
-                  v-for="status in projectStatuses" 
+              <div class="status-options">
+                <button
+                  v-for="status in projectStatuses"
                   :key="status"
-                  :value="status"
+                  :class="['status-option-btn', editingStatusText === status ? 'selected' : '']"
+                  @click="editingStatusText = status; saveStatus()"
                 >
                   {{ status }}
-                </option>
-              </select>
+                </button>
+              </div>
               <div class="status-actions">
-                <button class="btn btn-sm btn-secondary" @click="cancelEditStatus">
+                <button class="btn btn-cancel" @click="cancelEditStatus">
                   取消
                 </button>
               </div>
@@ -747,7 +739,50 @@ export default {
 }
 
 .readme-content {
-  line-height: 1.6;
+  padding: 0 2rem;
+  line-height: 1.8;
+}
+
+.readme-content p {
+  margin: 1.2em 0;
+  line-height: 1.8;
+}
+
+.readme-content h1,
+.readme-content h2,
+.readme-content h3,
+.readme-content h4,
+.readme-content h5,
+.readme-content h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.8em;
+  line-height: 1.4;
+}
+
+.readme-content ul,
+.readme-content ol {
+  margin: 1.2em 0;
+  padding-left: 2rem;
+}
+
+.readme-content li {
+  margin: 0.5em 0;
+  line-height: 1.8;
+}
+
+.readme-content blockquote {
+  margin: 1.5em 0;
+  padding-left: 1rem;
+  border-left: 4px solid #e5e5e5;
+}
+
+.readme-content pre,
+.readme-content code {
+  margin: 1.2em 0;
+}
+
+.readme-content hr {
+  margin: 2em 0;
 }
 
 .no-readme {
@@ -1053,23 +1088,21 @@ export default {
 
 /* 状态编辑样式 */
 .status-display {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.5rem;
-  position: relative;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 1rem;
   font-weight: 500;
   display: inline-block;
-  transition: opacity 0.2s;
-}
-
-.status-display .status-badge:hover {
-  opacity: 0.8;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .status-pending {
@@ -1107,51 +1140,114 @@ export default {
 }
 
 .status-note {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: #dc3545;
   font-style: italic;
 }
 
-.btn-edit-status {
-  background: none;
+/* 更改状态按钮 - 适配触摸屏 */
+.btn-change-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: #007bff;
+  color: white;
   border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s;
-  font-size: 0.8rem;
-  padding: 0.25rem;
+  transition: background 0.2s, transform 0.1s;
+  min-height: 44px;
+  min-width: 120px;
 }
 
-.status-display:hover .btn-edit-status {
-  opacity: 1;
+.btn-change-status:hover {
+  background: #0056b3;
 }
 
+.btn-change-status:active {
+  transform: scale(0.98);
+}
+
+.btn-icon {
+  font-size: 1.1rem;
+}
+
+.btn-text {
+  font-size: 1rem;
+}
+
+/* 状态编辑区域 */
 .status-edit {
-  display: inline-block;
-  min-width: 250px;
-  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 600px;
 }
 
-.status-select {
-  padding: 0.375rem 2rem 0.375rem 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 0.875rem;
+/* 状态选项按钮组 */
+.status-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.status-option-btn {
+  padding: 0.75rem 1.5rem;
+  border: 2px solid #ddd;
+  border-radius: 6px;
   background: white;
+  color: #333;
+  font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
-  min-width: 150px;
+  transition: all 0.2s;
+  min-height: 44px;
+  min-width: 100px;
 }
 
-.status-select:focus {
-  outline: none;
+.status-option-btn:hover {
   border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  background: #f0f8ff;
+}
+
+.status-option-btn:active {
+  transform: scale(0.98);
+}
+
+.status-option-btn.selected {
+  border-color: #007bff;
+  background: #007bff;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
 }
 
 .status-actions {
-  margin-top: 0.5rem;
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+}
+
+.btn-cancel {
+  padding: 0.75rem 1.5rem;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+  min-width: 100px;
+}
+
+.btn-cancel:hover {
+  background: #5a6268;
+}
+
+.btn-cancel:active {
+  transform: scale(0.98);
 }
 
 .btn-sm {

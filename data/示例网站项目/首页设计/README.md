@@ -1,6 +1,8 @@
 ---
-status: completed
+status: '789'
 prompt: 设计企业官网首页，展示公司形象和核心业务
+fileTags:
+  示例网站项目_首页设计_2.psd: 初稿
 ---
 
 # 首页设计
