@@ -31,10 +31,13 @@ app.use((req, res, next) => {
 });
 
 // API 不应被浏览器或中间代理缓存：强制 no-store
-app.use('/api', (req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+app.use("/api", (req, res, next) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   next();
 });
 
@@ -45,8 +48,8 @@ app.use("/api/upload", uploadRoutes);
 app.use("/api/psd", psdRoutes); // 保留向后兼容
 
 // 文件变化通知（SSE）
-const changesRoutes = require('./routes/changes')(DATA_PATH);
-app.use('/api/changes', changesRoutes);
+const changesRoutes = require("./routes/changes")(DATA_PATH);
+app.use("/api/changes", changesRoutes);
 app.use("/api/files", fileRoutes); // 新的通用文件路由
 app.use("/api/download", downloadRoutes); // 下载路由
 

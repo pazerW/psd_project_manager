@@ -263,13 +263,15 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
 
           // 写入文件（原子替换：先写入临时文件，再重命名）
           const fullContent = matter.stringify(content, frontmatter);
-          const tmpPath = `${readmePath}.tmp.${Date.now()}.${Math.floor(Math.random() * 100000)}`;
+          const tmpPath = `${readmePath}.tmp.${Date.now()}.${Math.floor(
+            Math.random() * 100000
+          )}`;
           await fs.writeFile(tmpPath, fullContent, "utf8");
 
           // 尝试 fsync 确保已写入磁盘（若可用）再重命名
           try {
             // 使用 fs.promises.open 获取 FileHandle（含 sync/close 方法）
-            const handle = await fs.promises.open(tmpPath, 'r+');
+            const handle = await fs.promises.open(tmpPath, "r+");
             try {
               await handle.sync();
             } finally {
@@ -277,7 +279,9 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
             }
           } catch (err) {
             // 如果 fsync 不可用或失败，记录但继续（rename 仍能保证原子替换）
-            console.warn(`[Status Update] fsync failed for ${tmpPath}: ${err.message}`);
+            console.warn(
+              `[Status Update] fsync failed for ${tmpPath}: ${err.message}`
+            );
           }
 
           await fs.rename(tmpPath, readmePath);
@@ -306,7 +310,12 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
           console.log(
             `[Status Update Success] ${projectName}/${taskName}: ${oldStatus} -> ${status} [${requestId}]`
           );
-          return { success: true, status, oldStatus, lastUpdated: frontmatter.updatedAt };
+          return {
+            success: true,
+            status,
+            oldStatus,
+            lastUpdated: frontmatter.updatedAt,
+          };
         } catch (error) {
           console.error(
             `[Status Update Error] ${projectName}/${taskName} [${requestId}]: ${error.message}`
@@ -437,7 +446,7 @@ async function analyzeTaskDetails(taskPath, taskName, projectName) {
   // 尝试获取 README 的 mtime 作为最后更新时间的后备
   let lastUpdated = null;
   try {
-    const readmePath = path.join(taskPath, 'README.md');
+    const readmePath = path.join(taskPath, "README.md");
     if (await fs.pathExists(readmePath)) {
       const st = await fs.stat(readmePath);
       lastUpdated = st.mtimeMs;
