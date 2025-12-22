@@ -46,20 +46,26 @@
         <div v-if="taskInfo.frontmatter" class="frontmatter">
           <div class="meta-item">
             <strong>状态：</strong>
-            <div v-if="!editingStatus" class="status-display">
-              <span 
+            <div class="status-display">
+              <!-- <span 
                 :class="`status-badge status-${taskInfo.frontmatter.status || 'pending'}`"
               >
                 {{ taskInfo.frontmatter.status || '待处理' }}
-              </span>
-              <button 
-                v-if="canEditStatus"
-                class="btn btn-change-status" 
-                @click="startEditStatus"
-              >
-                <span class="btn-icon">✏️</span>
-                <span class="btn-text">更改状态</span>
-              </button>
+              </span> -->
+
+              <!-- 直接展示所有可选状态，点击即时保存 -->
+              <div v-if="canEditStatus" class="status-options-inline">
+                <button
+                  v-for="status in projectStatuses"
+                  :key="status"
+                  :class="['status-option-btn', (taskInfo.frontmatter && taskInfo.frontmatter.status) === status ? 'selected' : '']"
+                  :disabled="savingStatus"
+                  @click="changeStatus(status)"
+                >
+                  {{ status }}
+                </button>
+              </div>
+
               <span 
                 v-if="!isStatusInAllowedList && taskInfo.frontmatter.status" 
                 class="status-note"
@@ -67,23 +73,6 @@
               >
                 ⚠️ 自定义状态
               </span>
-            </div>
-            <div v-else class="status-edit">
-              <div class="status-options">
-                <button
-                  v-for="status in projectStatuses"
-                  :key="status"
-                  :class="['status-option-btn', editingStatusText === status ? 'selected' : '']"
-                  @click="editingStatusText = status; saveStatus()"
-                >
-                  {{ status }}
-                </button>
-              </div>
-              <div class="status-actions">
-                <button class="btn btn-cancel" @click="cancelEditStatus">
-                  取消
-                </button>
-              </div>
             </div>
           </div>
           <div v-if="taskInfo.frontmatter.prompt" class="meta-item">
@@ -326,8 +315,9 @@ export default {
       editingDescriptionText: '', // 编辑中的描述文本
       editingTags: null, // 正在编辑标签的文件名
       editingTagsText: '', // 编辑中的标签文本
-      editingStatus: false, // 是否正在编辑状态
-      editingStatusText: '', // 编辑中的状态文本
+      editingStatus: false, // 是否正在编辑状态（保留兼容）
+      editingStatusText: '', // 编辑中的状态文本（保留兼容）
+      savingStatus: null, // 正在保存的状态值（用于防抖 / 禁用）
       projectStatuses: [], // 项目允许的状态列表
       projectTags: [] // 项目允许的标签列表
       ,
@@ -376,7 +366,6 @@ export default {
     if (typeof window !== 'undefined') {
       this._onDataChanged = (e) => {
         const detail = e.detail || {}
-        console.debug('[dataChanged] TaskDetail received event:', detail)
         const relPath = detail.path || ''
         const parts = relPath.split(/[\\/]/).filter(Boolean)
         // 如果变更影响当前任务或当前项目（project/README.md 或 project/task/README.md），重新加载任务详情
@@ -493,24 +482,38 @@ export default {
     },
     
     async saveStatus() {
-      if (!this.editingStatusText.trim()) {
+      // 保持向后兼容：若调用此方法（例如通过键盘提交），使用 editingStatusText
+      const status = (this.editingStatusText || '').trim()
+      if (!status) {
         alert('请选择一个状态')
         return
       }
-      
+      await this.changeStatus(status)
+      this.cancelEditStatus()
+    },
+
+    async changeStatus(status) {
+      if (!status || this.savingStatus) return
+      this.savingStatus = status
+
       try {
-        await axios.put(
+        const resp = await axios.put(
           `/api/tasks/${this.projectName}/${this.taskName}/status`,
-          { status: this.editingStatusText.trim() }
+          { status }
         )
-        
-        // 重新加载任务详情以确保状态同步
-        await this.loadTaskDetail()
-        
-        this.cancelEditStatus()
-      } catch (error) {
-        console.error('保存状态失败:', error)
-        alert('保存状态失败：' + (error.response?.data?.error || error.message))
+
+        // 更新内存中的状态（立即生效），并尝试使用返回的 lastUpdated
+        this.taskInfo.frontmatter = this.taskInfo.frontmatter || {}
+        this.taskInfo.frontmatter.status = status
+        if (resp.data && resp.data.lastUpdated) this.taskInfo.lastUpdated = resp.data.lastUpdated
+
+        // 刷新相关数据：状态列表等
+        await this.loadProjectStatuses()
+      } catch (err) {
+        console.error('更改状态失败:', err)
+        alert('更改状态失败：' + (err.response?.data?.error || err.message))
+      } finally {
+        this.savingStatus = null
       }
     },
     
