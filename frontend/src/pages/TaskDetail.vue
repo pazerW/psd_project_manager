@@ -304,7 +304,7 @@
 
 <script>
 import axios from 'axios'
-import { marked } from 'marked'
+import { renderMarkdown } from '../utils/markdown'
 import { formatDistance } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
@@ -352,7 +352,7 @@ export default {
   },
   computed: {
     renderedReadme() {
-      return marked(this.taskInfo.readmeContent || '')
+      return renderMarkdown(this.taskInfo.readmeContent || '')
     },
     // 检查当前状态是否可以编辑
     canEditStatus() {

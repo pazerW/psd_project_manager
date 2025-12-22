@@ -124,7 +124,7 @@
     <div v-else>
       <!-- 按状态分组显示项目 -->
       <div 
-        v-for="status in statusOrder" 
+        v-for="status in displayStatusOrder" 
         :key="status.value"
         v-show="groupedProjects[status.value] && groupedProjects[status.value].length > 0"
         class="status-group"
@@ -153,6 +153,9 @@
                   @click.stop
                   class="status-select"
                 >
+                  <option v-if="!isStatusKnown(project.status)" :value="project.status">
+                    未知 ({{ project.status }})
+                  </option>
                   <option 
                     v-for="statusOption in availableStatuses" 
                     :key="statusOption.value"
@@ -235,26 +238,50 @@ export default {
     }
   },
   computed: {
-    // 根据选中的状态筛选项目
+    // 根据选中的状态筛选项目。若项目状态不在可用状态列表中（未知），始终显示并归入 unknown 分组。
     filteredProjects() {
       if (this.selectedStatuses.length === 0) {
         return this.projects
       }
-      return this.projects.filter(project => 
-        this.selectedStatuses.includes(project.status)
-      )
+
+      return this.projects.filter(project => {
+        const isKnown = this.availableStatuses.some(s => s.value === project.status)
+        if (!isKnown) {
+          // 未知状态的项目始终包含，便于用户识别和修正
+          return true
+        }
+        return this.selectedStatuses.includes(project.status)
+      })
     },
-    // 按状态分组
+    // 按状态分组（未知状态归入 'unknown'，并为项目添加用于显示的标签）
     groupedProjects() {
       const groups = {}
       this.filteredProjects.forEach(project => {
-        const status = project.status || 'pending'
-        if (!groups[status]) {
-          groups[status] = []
+        const isKnown = this.availableStatuses.some(s => s.value === project.status)
+        const key = isKnown ? project.status : 'unknown'
+        if (!groups[key]) {
+          groups[key] = []
         }
-        groups[status].push(project)
+        const displayLabel = isKnown
+          ? this.availableStatuses.find(s => s.value === project.status).label
+          : '未知'
+
+        // 不修改原对象，创建浅拷贝以携带显示字段
+        groups[key].push(Object.assign({}, project, {
+          _displayStatusLabel: displayLabel,
+          _rawStatus: project.status
+        }))
       })
       return groups
+    },
+
+    // 渲染时使用的状态顺序；如果存在 unknown 分组则追加
+    displayStatusOrder() {
+      const order = [...this.statusOrder]
+      if (this.groupedProjects['unknown'] && this.groupedProjects['unknown'].length > 0) {
+        order.push({ value: 'unknown', label: '未知' })
+      }
+      return order
     }
   },
   watch: {
@@ -303,6 +330,10 @@ export default {
         // 重新加载项目列表
         await this.loadProjects()
       }
+    },
+
+    isStatusKnown(status) {
+      return this.availableStatuses.some(s => s.value === status)
     },
     
     // 状态管理方法

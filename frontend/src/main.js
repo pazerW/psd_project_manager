@@ -2,6 +2,10 @@ import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
 
+// KaTeX 和 代码高亮样式
+import "katex/dist/katex.min.css";
+import "highlight.js/styles/github.css";
+
 // 引入页面组件
 import ProjectList from "./pages/ProjectList.vue";
 import ProjectDetail from "./pages/ProjectDetail.vue";

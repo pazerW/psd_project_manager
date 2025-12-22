@@ -1,5 +1,5 @@
 ---
-status: completed
+status: completed1
 description: 网站界面设计项目
 allowedStatuses:
   - 进行中

@@ -1,7 +1,14 @@
 <template>
   <div class="project-detail">
     <div class="page-header">
-      <h2>{{ projectName }}</h2>
+      <h2>
+        {{ projectName }}
+        <span v-if="projectInfo" class="project-status-inline">
+          <span :class="`status-badge status-${projectInfo.status}`" style="margin-left:0.6rem; font-size:0.9rem;">
+            {{ projectInfo.status }}
+          </span>
+        </span>
+      </h2>
       <div class="header-actions">
         <button class="btn btn-secondary" @click="showStatusManager = true">
           ⚙️ 状态管理
@@ -12,11 +19,7 @@
         <button class="btn btn-download" @click="showDownloadDialog = true">
           📦 按标签下载
         </button>
-        <div v-if="projectInfo" class="project-meta">
-          <span :class="`status-badge status-${projectInfo.status}`">
-            {{ projectInfo.status }}
-          </span>
-        </div>
+        
       </div>
     </div>
 
@@ -392,6 +395,12 @@ export default {
         this.projectInfo = projectResponse.data
         this.allTasks = projectResponse.data.tasks || []
         this.selectedStatus = 'all'
+        // 更新页面标题为 DPM - [项目Name]
+        try {
+          document.title = `DPM - ${this.projectName}`
+        } catch (e) {
+          // 在非浏览器环境中安全忽略
+        }
         
         // 从项目信息中读取allowedStatuses
         if (projectResponse.data.allowedStatuses && Array.isArray(projectResponse.data.allowedStatuses)) {
