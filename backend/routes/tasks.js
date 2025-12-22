@@ -2,47 +2,25 @@ const express = require("express");
 const fs = require("fs-extra");
 const path = require("path");
 const matter = require("gray-matter");
+const {
+  ensureReadme,
+  updateFileDescription,
+  updateFileTags,
+  removeFileDescription,
+} = require("../utils/readme");
 
 const router = express.Router();
 
-// 确保 README.md 存在的工具函数
-async function ensureReadme(dirPath, name, type = "task") {
-  const readmePath = path.join(dirPath, "README.md");
+// 任务状态更新互斥锁映射
+const taskUpdateLocks = new Map();
 
-  if (!(await fs.pathExists(readmePath))) {
-    const timestamp = new Date().toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    const content = `---
-title: ${name}
-created: ${timestamp}
-status: pending
----
-
-# ${name}
-
-## 任务信息
-
-- 创建时间: ${timestamp}
-- 状态: 待处理
-
-## 设计文件说明
-
-<!-- 上传文件后，在这里添加说明 -->
-
-## 备注
-
-<!-- 其他备注信息 -->
-`;
-
-    await fs.writeFile(readmePath, content, "utf-8");
-    console.log(`Created README.md for task: ${name}`);
+// 获取任务更新锁
+function getTaskLock(projectName, taskName) {
+  const key = `${projectName}:${taskName}`;
+  if (!taskUpdateLocks.has(key)) {
+    taskUpdateLocks.set(key, Promise.resolve());
   }
+  return key;
 }
 
 // 获取特定项目的所有任务
@@ -161,7 +139,7 @@ router.put(
       const { projectName, taskName, fileName } = req.params;
       const { description } = req.body;
 
-      await updatePsdDescription(
+      await updateFileDescription(
         req.dataPath,
         projectName,
         taskName,
@@ -198,7 +176,7 @@ router.put(
       const { projectName, taskName, fileName } = req.params;
       const { description } = req.body;
 
-      await updatePsdDescription(
+      await updateFileDescription(
         req.dataPath,
         projectName,
         taskName,
@@ -239,36 +217,107 @@ router.put("/:projectName/:taskName/readme", async (req, res) => {
 
 // 更新任务状态
 router.put("/:projectName/:taskName/status", async (req, res) => {
+  const { projectName, taskName } = req.params;
+  let { status } = req.body;
+
+  if (status === undefined || status === null) {
+    return res.status(400).json({ error: "Status is required" });
+  }
+
+  status = String(status).trim();
+  const lockKey = getTaskLock(projectName, taskName);
+  const requestId = Date.now().toString();
+
+  console.log(
+    `[Status Update Start] ${projectName}/${taskName} -> ${status} [${requestId}]`
+  );
+
   try {
-    const { projectName, taskName } = req.params;
-    const { status } = req.body;
+    // 使用任务级别的互斥锁，确保返回结果
+    const result = await (taskUpdateLocks.set(
+      lockKey,
+      taskUpdateLocks.get(lockKey).then(async () => {
+        try {
+          const taskPath = path.join(req.dataPath, projectName, taskName);
+          const readmePath = path.join(taskPath, "README.md");
 
-    const taskPath = path.join(req.dataPath, projectName, taskName);
-    const readmePath = path.join(taskPath, "README.md");
+          if (!(await fs.pathExists(taskPath))) {
+            throw new Error("Task not found");
+          }
 
-    if (!(await fs.pathExists(taskPath))) {
-      return res.status(404).json({ error: "Task not found" });
-    }
+          // 读取现有README
+          let content = "";
+          let frontmatter = {};
 
-    // 读取现有README
-    let content = "";
-    let frontmatter = {};
+          if (await fs.pathExists(readmePath)) {
+            const fileContent = await fs.readFile(readmePath, "utf8");
+            const parsed = matter(fileContent);
+            content = parsed.content;
+            frontmatter = parsed.data;
+          }
 
-    if (await fs.pathExists(readmePath)) {
-      const fileContent = await fs.readFile(readmePath, "utf8");
-      const parsed = matter(fileContent);
-      content = parsed.content;
-      frontmatter = parsed.data;
-    }
+          // 更新status字段并设置更新时间
+          const oldStatus = frontmatter.status;
+          frontmatter.status = status;
+          frontmatter.updatedAt = Date.now();
 
-    // 更新status字段
-    frontmatter.status = status;
+          // 写入文件（原子替换：先写入临时文件，再重命名）
+          const fullContent = matter.stringify(content, frontmatter);
+          const tmpPath = `${readmePath}.tmp.${Date.now()}.${Math.floor(Math.random() * 100000)}`;
+          await fs.writeFile(tmpPath, fullContent, "utf8");
 
-    // 写回README文件
-    const fullContent = matter.stringify(content, frontmatter);
-    await fs.writeFile(readmePath, fullContent);
+          // 尝试 fsync 确保已写入磁盘（若可用）再重命名
+          try {
+            // 使用 fs.promises.open 获取 FileHandle（含 sync/close 方法）
+            const handle = await fs.promises.open(tmpPath, 'r+');
+            try {
+              await handle.sync();
+            } finally {
+              await handle.close();
+            }
+          } catch (err) {
+            // 如果 fsync 不可用或失败，记录但继续（rename 仍能保证原子替换）
+            console.warn(`[Status Update] fsync failed for ${tmpPath}: ${err.message}`);
+          }
 
-    res.json({ success: true, status });
+          await fs.rename(tmpPath, readmePath);
+
+          // 验证写入结果：重试几次，等待短暂时间，适应并发写入场景
+          let actualStatus = null;
+          let attempts = 0;
+          while (attempts < 5) {
+            const verifyContent = await fs.readFile(readmePath, "utf8");
+            const verifyParsed = matter(verifyContent);
+            actualStatus = verifyParsed.data.status;
+            if (actualStatus === status) break;
+            attempts++;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+
+          if (actualStatus !== status) {
+            console.error(
+              `[Status Update Error] ${projectName}/${taskName} 验证失败 [${requestId}]: 期望=${status}, 实际=${actualStatus}`
+            );
+            throw new Error(
+              `Status verification failed: expected ${status}, got ${actualStatus}`
+            );
+          }
+
+          console.log(
+            `[Status Update Success] ${projectName}/${taskName}: ${oldStatus} -> ${status} [${requestId}]`
+          );
+          return { success: true, status, oldStatus, lastUpdated: frontmatter.updatedAt };
+        } catch (error) {
+          console.error(
+            `[Status Update Error] ${projectName}/${taskName} [${requestId}]: ${error.message}`
+          );
+          throw error;
+        }
+      })
+    ),
+    taskUpdateLocks.get(lockKey));
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -284,23 +333,25 @@ router.get("/:projectName/statuses/list", async (req, res) => {
       return res.status(404).json({ error: "Project not found" });
     }
 
+    let allowedStatuses = [];
+
     // 首先尝试从项目 README 中读取定义的状态列表
     const projectReadmePath = path.join(projectPath, "README.md");
     if (await fs.pathExists(projectReadmePath)) {
       const content = await fs.readFile(projectReadmePath, "utf8");
       const parsed = matter(content);
 
-      // 如果项目 README 中定义了 allowedStatuses，则使用它
+      // 如果项目 README 中定义了 allowedStatuses，则使用它作为基础
       if (
         parsed.data.allowedStatuses &&
         Array.isArray(parsed.data.allowedStatuses)
       ) {
-        return res.json(parsed.data.allowedStatuses);
+        allowedStatuses = [...parsed.data.allowedStatuses];
       }
     }
 
-    // 如果项目 README 中没有定义状态列表，则收集所有已使用的状态
-    const statusSet = new Set();
+    // 收集所有任务中实际使用的状态
+    const statusSet = new Set(allowedStatuses);
     const items = await fs.readdir(projectPath, { withFileTypes: true });
 
     for (const item of items) {
@@ -319,13 +370,15 @@ router.get("/:projectName/statuses/list", async (req, res) => {
       }
     }
 
-    res.json(Array.from(statusSet).sort());
+    // 返回合并后的状态列表（保持配置的状态在前，实际使用的状态在后）
+    const result = [...new Set([...allowedStatuses, ...Array.from(statusSet)])];
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 分析任务详情的辅助函数
+// 分析任务详情的辅助函数（不使用缓存）
 async function analyzeTaskDetails(taskPath, taskName, projectName) {
   let readmeContent = "";
   let frontmatter = {};
@@ -381,14 +434,28 @@ async function analyzeTaskDetails(taskPath, taskName, projectName) {
     console.error(`Error analyzing task details ${taskName}:`, error);
   }
 
-  return {
+  // 尝试获取 README 的 mtime 作为最后更新时间的后备
+  let lastUpdated = null;
+  try {
+    const readmePath = path.join(taskPath, 'README.md');
+    if (await fs.pathExists(readmePath)) {
+      const st = await fs.stat(readmePath);
+      lastUpdated = st.mtimeMs;
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  const result = {
     name: taskName,
     path: taskPath,
     readmeContent,
     frontmatter,
     psdFiles,
     psdCount: psdFiles.length,
+    lastUpdated: (frontmatter && frontmatter.updatedAt) || lastUpdated,
   };
+  return result;
 }
 
 // 从README内容中提取PSD文件描述
@@ -425,135 +492,6 @@ function getPsdDescriptionsFromReadme(readmeContent) {
   }
 
   return descriptions;
-}
-
-// 更新PSD文件描述到README
-async function updatePsdDescription(
-  dataPath,
-  projectName,
-  taskName,
-  fileName,
-  description
-) {
-  const taskPath = path.join(dataPath, projectName, taskName);
-  const readmePath = path.join(taskPath, "README.md");
-
-  let content = "";
-  let frontmatter = {};
-
-  // 读取现有README
-  if (await fs.pathExists(readmePath)) {
-    const fileContent = await fs.readFile(readmePath, "utf8");
-    const parsed = matter(fileContent);
-    content = parsed.content;
-    frontmatter = parsed.data;
-  }
-
-  // 更新文件描述部分
-  content = updatePsdSectionInReadme(content, fileName, description);
-
-  // 写回README文件
-  const fullContent = matter.stringify(content, frontmatter);
-  await fs.writeFile(readmePath, fullContent);
-}
-
-// 在README内容中更新PSD文件描述段落
-function updatePsdSectionInReadme(content, fileName, description) {
-  const lines = content.split("\n");
-  let psdSectionIndex = -1;
-  let psdSectionEndIndex = -1;
-  let fileLineIndex = -1;
-
-  // 查找PSD文件说明段落
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
-    if (
-      line === "## PSD文件说明" ||
-      line === "## PSD Files" ||
-      line === "## 设计文件说明" ||
-      line === "## Design Files"
-    ) {
-      psdSectionIndex = i;
-      continue;
-    }
-
-    if (psdSectionIndex !== -1 && line.startsWith("##")) {
-      psdSectionEndIndex = i;
-      break;
-    }
-
-    if (psdSectionIndex !== -1 && line.includes(`**${fileName}**`)) {
-      fileLineIndex = i;
-    }
-  }
-
-  // 如果没有PSD文件说明段落，创建一个
-  if (psdSectionIndex === -1) {
-    lines.push("");
-    lines.push("## 设计文件说明");
-    lines.push("");
-    psdSectionIndex = lines.length - 2;
-  }
-
-  // 更新或添加文件描述
-  const descriptionLine = `- **${fileName}**：${description || "暂无描述"}`;
-
-  if (fileLineIndex !== -1) {
-    // 更新现有描述
-    if (description) {
-      lines[fileLineIndex] = descriptionLine;
-    } else {
-      // 如果描述为空，删除这行
-      lines.splice(fileLineIndex, 1);
-    }
-  } else if (description) {
-    // 添加新的文件描述
-    const insertIndex =
-      psdSectionEndIndex !== -1 ? psdSectionEndIndex : lines.length;
-    lines.splice(insertIndex, 0, descriptionLine);
-  }
-
-  return lines.join("\n");
-}
-
-// 更新文件标签
-async function updateFileTags(dataPath, projectName, taskName, fileName, tags) {
-  const taskPath = path.join(dataPath, projectName, taskName);
-  const readmePath = path.join(taskPath, "README.md");
-
-  try {
-    let content = "";
-    let frontmatter = {};
-
-    if (await fs.pathExists(readmePath)) {
-      const fileContent = await fs.readFile(readmePath, "utf8");
-      const parsed = matter(fileContent);
-      content = parsed.content;
-      frontmatter = parsed.data;
-    }
-
-    // 初始化fileTags对象
-    if (!frontmatter.fileTags) {
-      frontmatter.fileTags = {};
-    }
-
-    // 保存或删除标签
-    if (tags && tags.trim()) {
-      frontmatter.fileTags[fileName] = tags.trim();
-    } else {
-      delete frontmatter.fileTags[fileName];
-    }
-
-    // 重新组合README内容
-    const newContent = matter.stringify(content, frontmatter);
-    await fs.writeFile(readmePath, newContent, "utf8");
-
-    console.log(`已更新文件 ${fileName} 的标签: ${tags}`);
-  } catch (error) {
-    console.error("更新文件标签失败:", error);
-    throw error;
-  }
 }
 
 // 获取文件类型

@@ -36,3 +36,4 @@ coverage/
 backend/public/
 
 docker_compose_local.yml
+/logs

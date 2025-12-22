@@ -356,6 +356,18 @@ async function analyzeProject(projectPath, projectName) {
     console.error(`Error analyzing project ${projectName}:`, error);
   }
 
+  // 尝试获取项目 README 的 mtime 作为 lastUpdated 后备
+  let projectMtime = null;
+  try {
+    const projectReadme = path.join(projectPath, "README.md");
+    if (await fs.pathExists(projectReadme)) {
+      const st = await fs.stat(projectReadme);
+      projectMtime = st.mtimeMs;
+    }
+  } catch (err) {
+    // ignore
+  }
+
   return {
     name: projectName,
     path: projectPath,
@@ -363,6 +375,7 @@ async function analyzeProject(projectPath, projectName) {
     taskCount: tasks.length,
     totalPsdFiles,
     tasks,
+    lastUpdated: (projectInfo && projectInfo.updatedAt) || projectMtime,
     ...projectInfo,
   };
 }

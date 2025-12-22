@@ -296,11 +296,47 @@ export default {
   async mounted() {
     await this.loadStatusConfig()
     await this.loadProjects()
+
+    // 监听后端文件变更事件，自动刷新项目列表
+    if (typeof window !== 'undefined') {
+      this._onDataChanged = (e) => {
+        const detail = e.detail || {}
+        console.debug('[dataChanged] ProjectList received event:', detail)
+        // 如果 payload 包含状态，立即尝试更新内存中的项目信息以避免短暂不同步
+        const rel = detail.path || ''
+        const parts = rel.split(/[\\/]/).filter(Boolean)
+        if (parts.length >= 1 && detail.status !== undefined && this.projects) {
+          const projectName = parts[0]
+          const p = this.projects.find(p => p.name === projectName)
+          if (p) {
+            const eventTime = detail.lastUpdated || (detail.frontmatter && detail.frontmatter.updatedAt) || detail.mtime || 0
+            const currentTime = (p && (p.lastUpdated || p.updatedAt)) || 0
+            if (!eventTime || eventTime >= currentTime) {
+              console.debug('[dataChanged] ProjectList: immediate update project status', projectName, detail.status, 'eventTime=', eventTime)
+              p.status = detail.status
+              if (eventTime) p.lastUpdated = eventTime
+            } else {
+              console.debug('[dataChanged] ProjectList: ignored older project event', projectName, detail.status, 'eventTime=', eventTime, 'currentTime=', currentTime)
+            }
+          }
+        }
+
+        // 继续加载项目列表以确保完整更新（包含 allowedStatuses 等）
+        this.loadProjects()
+      }
+      window.addEventListener('dataChanged', this._onDataChanged)
+    }
+  },
+
+  beforeUnmount() {
+    if (this._onDataChanged) {
+      window.removeEventListener('dataChanged', this._onDataChanged)
+    }
   },
   methods: {
     async loadProjects() {
       try {
-        const response = await axios.get('/api/projects')
+        const response = await axios.get('/api/projects', { headers: { 'Cache-Control': 'no-store' }, params: { _ts: Date.now() } })
         this.projects = response.data
       } catch (error) {
         console.error('Failed to load projects:', error)

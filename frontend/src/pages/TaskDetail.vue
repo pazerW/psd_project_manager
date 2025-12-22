@@ -369,10 +369,49 @@ export default {
     }
   },
   async mounted() {
+    console.debug('[debug] TaskDetail mounted', this.projectName, this.taskName)
     await this.loadTaskDetail()
+
+    // 监听 README 变更以保持状态同步
+    if (typeof window !== 'undefined') {
+      this._onDataChanged = (e) => {
+        const detail = e.detail || {}
+        console.debug('[dataChanged] TaskDetail received event:', detail)
+        const relPath = detail.path || ''
+        const parts = relPath.split(/[\\/]/).filter(Boolean)
+        // 如果变更影响当前任务或当前项目（project/README.md 或 project/task/README.md），重新加载任务详情
+        if (parts[0] === this.projectName) {
+          // 若有第二部分且匹配当前任务，或者只是项目 README 变更，都刷新
+          if (!parts[1] || parts[1] === this.taskName) {
+            // 立即更新状态以防止短暂不同步
+            if (detail.status !== undefined) {
+              const eventTime = detail.lastUpdated || (detail.frontmatter && detail.frontmatter.updatedAt) || detail.mtime || 0
+              const currentTime = (this.taskInfo && (this.taskInfo.lastUpdated || (this.taskInfo.frontmatter && this.taskInfo.frontmatter.updatedAt))) || 0
+
+              if (!eventTime || eventTime >= currentTime) {
+                this.taskInfo = this.taskInfo || { frontmatter: {} }
+                this.taskInfo.frontmatter = this.taskInfo.frontmatter || {}
+                this.taskInfo.frontmatter.status = detail.status
+                if (eventTime) this.taskInfo.lastUpdated = eventTime
+                console.debug('[dataChanged] TaskDetail: immediate status update', detail.status, 'eventTime=', eventTime)
+              } else {
+                console.debug('[dataChanged] TaskDetail: ignored older event', detail.status, 'eventTime=', eventTime, 'currentTime=', currentTime)
+              }
+            }
+            this.loadTaskDetail()
+          }
+        }
+      }
+      window.addEventListener('dataChanged', this._onDataChanged)
+    }
   },
   beforeUnmount() {
+    if (this._onDataChanged) {
+      window.removeEventListener('dataChanged', this._onDataChanged)
+    }
   },
+
+
   watch: {
     taskName: {
       handler: 'loadTaskDetail',
@@ -392,7 +431,7 @@ export default {
       this.loading = true
       try {
         // 加载任务详情
-        const taskResponse = await axios.get(`/api/tasks/${this.projectName}/${this.taskName}`)
+        const taskResponse = await axios.get(`/api/tasks/${this.projectName}/${this.taskName}`, { headers: { 'Cache-Control': 'no-store' } })
         this.taskInfo = taskResponse.data
         
         // 加载PSD文件列表

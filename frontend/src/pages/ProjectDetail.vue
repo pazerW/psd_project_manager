@@ -371,6 +371,58 @@ export default {
   },
   async mounted() {
     await this.loadProject()
+
+    // 监听 README 变更，仅当变更影响当前项目时重新加载
+    if (typeof window !== 'undefined') {
+      this._onDataChanged = (e) => {
+        const detail = e.detail || {}
+        console.debug('[dataChanged] ProjectDetail received event:', detail)
+        const relPath = detail.path || ''
+        const parts = relPath.split(/[\\/]/).filter(Boolean)
+        // 如果变更在当前项目下（project/README.md 或 project/task/README.md），则 reload
+        if (parts[0] === this.projectName) {
+          // 若仅为项目 README 变更，立即更新 project status（若提供），然后 reload
+          if (parts.length === 1) {
+            if (detail.status !== undefined) {
+              const eventTime = detail.lastUpdated || (detail.frontmatter && detail.frontmatter.updatedAt) || detail.mtime || 0
+              const currentTime = (this.projectInfo && this.projectInfo.lastUpdated) || (this.projectInfo && this.projectInfo.updatedAt) || 0
+              if (!eventTime || eventTime >= currentTime) {
+                this.projectInfo = this.projectInfo || {}
+                this.projectInfo.status = detail.status
+                if (eventTime) this.projectInfo.lastUpdated = eventTime
+                console.debug('[dataChanged] ProjectDetail: immediate project status update', detail.status, 'eventTime=', eventTime)
+              } else {
+                console.debug('[dataChanged] ProjectDetail: ignored older project event', detail.status, 'eventTime=', eventTime, 'currentTime=', currentTime)
+              }
+            }
+            this.loadProject()
+          } else if (parts.length >= 2) {
+            // task README 变更：尝试立即更新内存任务状态
+            const taskName = parts[1]
+            if (detail.status !== undefined) {
+              const t = this.allTasks.find(t => t.name === taskName)
+              const eventTime = detail.lastUpdated || (detail.frontmatter && detail.frontmatter.updatedAt) || detail.mtime || 0
+              const currentTime = (t && (t.lastUpdated || (t.frontmatter && t.frontmatter.updatedAt))) || 0
+              if (t && (!eventTime || eventTime >= currentTime)) {
+                t.status = detail.status
+                if (eventTime) t.lastUpdated = eventTime
+                console.debug('[dataChanged] ProjectDetail: immediate task status update', taskName, detail.status, 'eventTime=', eventTime)
+              } else {
+                console.debug('[dataChanged] ProjectDetail: ignored older task event', taskName, detail.status, 'eventTime=', eventTime, 'currentTime=', currentTime)
+              }
+            }
+            this.loadProject()
+          }
+        }
+      }
+      window.addEventListener('dataChanged', this._onDataChanged)
+    }
+  },
+
+  beforeUnmount() {
+    if (this._onDataChanged) {
+      window.removeEventListener('dataChanged', this._onDataChanged)
+    }
   },
   watch: {
     projectName: {
@@ -388,10 +440,12 @@ export default {
   },
   methods: {
     async loadProject() {
+      console.debug('[debug] loadProject start', this.projectName)
       this.loading = true
       try {
-        // 加载项目信息
-        const projectResponse = await axios.get(`/api/projects/${this.projectName}`)
+        // 加载项目信息（强制不走缓存）
+        const projectResponse = await axios.get(`/api/projects/${this.projectName}`, { headers: { 'Cache-Control': 'no-store' } })
+        console.debug('[debug] loadProject response status:', projectResponse.data && projectResponse.data.status)
         this.projectInfo = projectResponse.data
         this.allTasks = projectResponse.data.tasks || []
         this.selectedStatus = 'all'
