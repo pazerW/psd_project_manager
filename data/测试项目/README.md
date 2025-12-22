@@ -1,8 +1,18 @@
 ---
 title: 测试项目
-created: 2025/12/20 18:24
+created: '2025/12/20 18:24'
 status: active
-allowedStatuses: ["pending", "in-progress", "review", "completed", "cancelled"]
+allowedStatuses:
+  - pending
+  - in-progress
+  - review
+  - completed
+  - cancelled
+allowedTags:
+  - 初稿
+  - 定稿
+  - 客户审核
+  - 最终版
 ---
 
 # 测试项目

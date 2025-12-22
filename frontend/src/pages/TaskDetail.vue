@@ -46,12 +46,6 @@
         <div v-if="taskInfo.frontmatter" class="frontmatter">
           <div class="meta-item">
             <strong>状态：</strong>
-            <div class="status-display">
-              <!-- <span 
-                :class="`status-badge status-${taskInfo.frontmatter.status || 'pending'}`"
-              >
-                {{ taskInfo.frontmatter.status || '待处理' }}
-              </span> -->
 
               <!-- 直接展示所有可选状态，点击即时保存 -->
               <div v-if="canEditStatus" class="status-options-inline">
@@ -80,7 +74,11 @@
             <p class="prompt">{{ taskInfo.frontmatter.prompt }}</p>
           </div>
         </div>
-        <div v-if="taskInfo.readmeContent" class="readme-content" v-html="renderedReadme"></div>
+        <div v-if="taskInfo.readmeContent" class="readme-wrapper">
+          <h4 class="readme-title">README</h4>
+          <hr class="readme-sep" />
+          <div class="readme-content" v-html="renderedReadme"></div>
+        </div>
         <div v-else class="no-readme">
           <p>暂无任务说明</p>
           <p class="help-text">请在任务目录中创建 README.md 文件</p>
@@ -90,20 +88,57 @@
       <!-- PSD 文件区域 -->
       <div class="psd-section card">
         <h3>设计文件 ({{ psdFiles.length }})</h3>
-        
+
+        <div class="psd-toolbar">
+          <div class="toolbar-left">
+            <div class="toolbar-mode">
+              <button
+                class="btn-sm btn-sm-toggle"
+                :class="{ selected: sortBy === 'time' }"
+                @click="setSortBy('time')"
+                title="按时间排序"
+              >按时间</button>
+              <button
+                class="btn-sm btn-sm-toggle"
+                :class="{ selected: sortBy === 'tag' }"
+                @click="setSortBy('tag')"
+                title="按标签排序（分组）"
+              >按标签</button>
+            </div>
+
+            <span class="toolbar-sep">排序：</span>
+            <button
+              class="btn-sm btn-sm-toggle"
+              :class="{ selected: sortMode === 'desc' }"
+              @click="setSortMode('desc')"
+              title="按上传时间倒序（最新在前）"
+            >倒序</button>
+            <button
+              class="btn-sm btn-sm-toggle"
+              :class="{ selected: sortMode === 'asc' }"
+              @click="setSortMode('asc')"
+            >正序</button>
+          </div>
+
+
+        </div>
+
+        <!-- 临时调试横幅已移除 -->
+
         <div v-if="psdFiles.length === 0" class="empty-psd">
           <p>暂无文件</p>
           <button class="btn btn-primary" @click="showUpload = true">
             上传第一个文件
           </button>
         </div>
-        
-        <div v-else class="psd-grid">
-          <div 
-            v-for="(file, idx) in psdFiles" 
-            :key="file.name"
-            class="psd-item"
-          >
+
+        <div v-else>
+          <div v-show="!groupByTag" class="psd-grid">
+            <div 
+              v-for="(file, idx) in sortedFiles" 
+              :key="file.name"
+              class="psd-item"
+            >
             <div class="psd-thumbnail">
               <img 
                 :src="encodeURI(file.thumbnailUrl)" 
@@ -213,6 +248,136 @@
             </div>
           </div>
         </div>
+
+        <div v-show="groupByTag" class="psd-groups">
+          <div v-for="group in groupedFiles" :key="group.tag" class="psd-group">
+            <div class="group-header">
+              <h4>{{ group.tag }} ({{ group.files.length }})</h4>
+              <div class="group-controls">
+                <button class="btn-sm btn-sm-toggle" :class="{ selected: group.sortOrder === 'asc' }" @click="setGroupSort(group.tag, 'asc')">正序</button>
+                <button class="btn-sm btn-sm-toggle" :class="{ selected: group.sortOrder === 'desc' }" @click="setGroupSort(group.tag, 'desc')">倒序</button>
+              </div>
+            </div>
+
+            <div class="psd-grid">
+              <div 
+                v-for="(file, idx) in group.files" 
+                :key="file.name"
+                class="psd-item"
+              >
+                <div class="psd-thumbnail">
+                  <img 
+                    :src="encodeURI(file.thumbnailUrl)" 
+                    :alt="file.name"
+                    @error="handleImageError($event, file.name)"
+                    @load="handleImageLoad($event, file.name)"
+                    @click="openLightboxByName(file.name)"
+                    :key="file.thumbnailUrl"
+                  />
+                </div>
+                  <div class="psd-info">
+                    <h4>{{ file.name }}</h4>
+                    <p class="file-size">{{ formatFileSize(file.size) }}</p>
+                    <p class="file-date">{{ formatDate(file.modified) }}</p>
+
+                    <!-- 文件标签 -->
+                    <div class="psd-tags">
+                      <div v-if="editingTags !== file.name" class="tags-display">
+                        <span v-if="file.tags" class="tags-badge">🏷️ {{ file.tags }}</span>
+                        <span v-else class="tags-placeholder" @click="projectTags.length > 0 && startEditTags(file.name, file.tags || '')">
+                          {{ projectTags.length > 0 ? '点击选择标签...' : '请先在项目中配置标签' }}
+                        </span>
+                        <button 
+                          v-if="projectTags.length > 0"
+                          class="btn-edit-tags" 
+                          @click="startEditTags(file.name, file.tags || '')"
+                          title="编辑标签"
+                        >
+                          ✏️
+                        </button>
+                        <span 
+                          v-if="file.tags && !isTagInAllowedList(file.tags)" 
+                          class="status-note"
+                          title="此标签未在项目中定义，建议修改为允许的标签"
+                        >
+                          ⚠️ 自定义标签
+                        </span>
+                      </div>
+                      <div v-else class="tags-edit">
+                        <select 
+                          v-model="editingTagsText"
+                          class="tags-select"
+                          @change="saveTags(file.name)"
+                          ref="tagsSelect"
+                        >
+                          <option value="" disabled>请选择标签</option>
+                          <option 
+                            v-for="tag in projectTags" 
+                            :key="tag"
+                            :value="tag"
+                          >
+                            {{ tag }}
+                          </option>
+                        </select>
+                        <div class="tags-actions">
+                          <button class="btn btn-sm btn-secondary" @click="cancelEditTags">
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 文件描述 -->
+                    <div class="psd-description">
+                      <div v-if="editingDescription !== file.name" class="description-display">
+                        <p v-if="file.description" class="description-text">{{ file.description }}</p>
+                        <p v-else class="description-placeholder">点击添加描述...</p>
+                        <button 
+                          class="btn-edit-desc" 
+                          @click="startEditDescription(file.name, file.description || '')"
+                          title="编辑描述"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                      <div v-else class="description-edit">
+                        <textarea 
+                          v-model="editingDescriptionText"
+                          class="description-input"
+                          placeholder="输入文件描述..."
+                          rows="3"
+                          @keydown.ctrl.enter="saveDescription(file.name)"
+                          @keydown.esc="cancelEditDescription"
+                        ></textarea>
+                        <div class="description-actions">
+                          <button class="btn btn-sm btn-primary" @click="saveDescription(file.name)">
+                            保存
+                          </button>
+                          <button class="btn btn-sm btn-secondary" @click="cancelEditDescription">
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="psd-actions">
+                      <a :href="file.downloadUrl" class="btn btn-secondary btn-sm" download>
+                        下载
+                      </a>
+                      <button 
+                        class="btn btn-danger btn-sm"
+                        @click="deleteFile(file.name)"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -288,7 +453,6 @@
         </div>
       </div>
     </div>
-  </div>
 </template>
 
 <script>
@@ -319,7 +483,13 @@ export default {
       editingStatusText: '', // 编辑中的状态文本（保留兼容）
       savingStatus: null, // 正在保存的状态值（用于防抖 / 禁用）
       projectStatuses: [], // 项目允许的状态列表
-      projectTags: [] // 项目允许的标签列表
+      projectTags: [], // 项目允许的标签列表
+
+      // 排序与分组
+      groupByTag: false,
+      sortBy: 'time', // 'time' 或 'tag'，默认按时间排序
+      sortMode: 'desc', // 'asc' 或 'desc'，默认倒序（最新在前）
+      groupSortOrders: {} // 每个标签的排序方向覆盖
       ,
       // Lightbox
       lightboxVisible: false,
@@ -356,6 +526,67 @@ export default {
         return true
       }
       return this.projectStatuses.includes(currentStatus)
+    },
+
+    // 按上传时间排序后的文件列表（应用全局排序）
+    sortedFiles() {
+      const arr = (this.psdFiles || []).slice()
+      arr.sort((a, b) => {
+        const aTime = new Date(a.modified).getTime() || 0
+        const bTime = new Date(b.modified).getTime() || 0
+        return this.sortMode === 'asc' ? aTime - bTime : bTime - aTime
+      })
+      return arr
+    },
+
+    // 按标签分组后的结构：[{ tag, files, sortOrder }]
+    groupedFiles() {
+      try {
+        const groupsMap = {}
+        const defaultTag = '未分类'
+        ;(this.psdFiles || []).forEach(f => {
+          const tag = f.tags || defaultTag
+          if (!groupsMap[tag]) groupsMap[tag] = []
+          groupsMap[tag].push(f)
+        })
+
+        // 只保留在文件中实际存在的标签（避免展示所有项目允许标签但无文件的空组）
+        const presentTags = Object.keys(groupsMap)
+
+        // 按项目中定义的标签顺序对存在的标签进行排序，其次是自定义标签，最后放未分类
+        presentTags.sort((a, b) => {
+          const ai = this.projectTags.indexOf(a)
+          const bi = this.projectTags.indexOf(b)
+          if (ai !== -1 && bi !== -1) return ai - bi
+          if (ai !== -1) return -1
+          if (bi !== -1) return 1
+          if (a === defaultTag) return 1
+          if (b === defaultTag) return -1
+          return a.localeCompare(b)
+        })
+
+        const result = presentTags.map(tag => {
+          const sortOrder = this.groupSortOrders[tag] || this.sortMode
+          const files = (groupsMap[tag] || []).slice().sort((a, b) => {
+            const aTime = new Date(a.modified).getTime() || 0
+            const bTime = new Date(b.modified).getTime() || 0
+            return sortOrder === 'asc' ? aTime - bTime : bTime - aTime
+          })
+          return { tag, files, sortOrder }
+        })
+
+        // debug output
+        if (typeof window !== 'undefined' && console && console.debug) {
+          console.debug('[groupedFiles]', result.map(g => ({ tag: g.tag, count: g.files.length, sortOrder: g.sortOrder })))
+        }
+
+        return result
+      } catch (err) {
+        if (typeof window !== 'undefined' && console && console.error) {
+          console.error('[groupedFiles] error', err && err.stack ? err.stack : err)
+        }
+        return []
+      }
     }
   },
   async mounted() {
@@ -405,6 +636,23 @@ export default {
     taskName: {
       handler: 'loadTaskDetail',
       immediate: false
+    },
+
+    // 当用户切换“按标签分类”时，确保分组排序信息被初始化，并同步 sortBy
+    groupByTag(newVal) {
+      if (newVal) {
+        this.sortBy = 'tag'
+        this.updateGroupSortOrders()
+      } else {
+        this.sortBy = 'time'
+      }
+    },
+
+    // 当文件列表发生变化时，如果处于分组模式需要更新分组信息
+    psdFiles() {
+      if (this.groupByTag) {
+        this.updateGroupSortOrders()
+      }
     }
   },
   methods: {
@@ -426,6 +674,8 @@ export default {
         // 加载PSD文件列表
         const filesResponse = await axios.get(`/api/tasks/${this.projectName}/${this.taskName}/files`)
         this.psdFiles = filesResponse.data
+        // 初始化分组排序信息（如果需要）
+        this.updateGroupSortOrders()
         
         // 加载项目中所有已使用的状态
         await this.loadProjectStatuses()
@@ -767,9 +1017,60 @@ export default {
       if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'].includes(ext)) return 'image'
       if (ext === '.svg') return 'svg'
       return 'other'
-    }
+    },
 
-    ,
+    // 排序与分组功能
+    setSortMode(mode) {
+      if (mode !== 'asc' && mode !== 'desc') return
+      this.sortMode = mode
+      // 如果未给某些标签显式设置，则保持同步为全局排序
+      Object.keys(this.groupSortOrders).forEach(tag => {
+        if (!this.groupSortOrders[tag]) this.groupSortOrders[tag] = mode
+      })
+    },
+
+    setSortBy(mode) {
+      if (mode !== 'time' && mode !== 'tag') return
+      this.sortBy = mode
+      // 切换到按标签排序时，打开分组并初始化分组排序
+      if (mode === 'tag') {
+        this.groupByTag = true
+        this.updateGroupSortOrders()
+      } else {
+        this.groupByTag = false
+      }
+    },
+
+    toggleGroupByTag() {
+      // `groupByTag` is updated by v-model on the checkbox; 只在开启时初始化分组排序信息
+      console.debug('[TaskDetail] toggleGroupByTag called, groupByTag=', this.groupByTag)
+      if (this.groupByTag) {
+        const tags = new Set()
+        ;(this.psdFiles || []).forEach(f => {
+          tags.add(f.tags || '未分类')
+        })
+        tags.forEach(t => {
+          if (!this.groupSortOrders[t]) this.groupSortOrders[t] = this.sortMode
+        })
+      }
+    },
+
+    setGroupSort(tag, mode) {
+      if (mode !== 'asc' && mode !== 'desc') return
+      this.groupSortOrders[tag] = mode
+    },
+
+    // 初始化或更新 groupSortOrders
+    updateGroupSortOrders() {
+      if (!this.psdFiles) return
+      const tags = new Set()
+      ;(this.psdFiles || []).forEach(f => {
+        tags.add(f.tags || '未分类')
+      })
+      tags.forEach(t => {
+        if (!this.groupSortOrders[t]) this.groupSortOrders[t] = this.sortMode
+      })
+    },
 
     // Lightbox methods
     openLightbox(idx) {
@@ -784,6 +1085,11 @@ export default {
       this.originY = null
       document.addEventListener('keydown', this._onKeydown)
       document.body.style.overflow = 'hidden'
+    },
+
+    openLightboxByName(name) {
+      const idx = (this.psdFiles || []).findIndex(f => f.name === name)
+      if (idx !== -1) this.openLightbox(idx)
     },
 
     closeLightbox() {
@@ -903,6 +1209,10 @@ export default {
   padding-bottom: 0.5rem;
 }
 
+.readme-section {
+  margin-bottom: 2rem;
+}
+
 .frontmatter {
   background: #f8f9fa;
   padding: 1rem;
@@ -928,8 +1238,14 @@ export default {
 }
 
 .readme-content {
-  padding: 0 2rem;
+  padding: 1.25rem 1.5rem;
   line-height: 1.8;
+  background: #ffffff;
+  border: 1px solid #eef0f2;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(16,24,40,0.04);
+  color: #333;
+  margin-bottom: 5rem;
 }
 
 .readme-content p {
@@ -946,6 +1262,45 @@ export default {
   margin-top: 1.5em;
   margin-bottom: 0.8em;
   line-height: 1.4;
+}
+/* 改为“人物说明”卡片风格：左侧强调条 + 软色背景 */
+.readme-wrapper {
+  position: relative;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem;
+  background: linear-gradient(180deg,#fbfdff,#ffffff);
+  border: 1px solid #e6eef6;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(16,24,40,0.04);
+  overflow: visible;
+}
+
+/* 左侧强调条已移除，恢复常规内边距 */
+.readme-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  color: #102a43;
+  font-weight: 700;
+  display: block;
+  letter-spacing: 0.1px;
+}
+
+.readme-sep {
+  border: none;
+  height: 1px;
+  background: transparent;
+  margin: 0 0 0.6rem 0;
+}
+
+.readme-content h1,
+.readme-content h2,
+.readme-content h3,
+.readme-content h4,
+.readme-content h5,
+.readme-content h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.8em;
+  margin-bottom: 1rem;
 }
 
 .readme-content ul,
@@ -996,6 +1351,87 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
+}
+
+/* 排序与分组工具栏 */
+.psd-toolbar {
+  margin: 0.75rem 0 1rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.psd-toolbar .btn-sm-toggle {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+}
+.psd-toolbar .btn-sm-toggle.selected {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.toolbar-mode {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-right: 0.75rem;
+  align-items: center;
+}
+
+.toolbar-sep {
+  margin-right: 0.5rem;
+  color: #666;
+  font-weight: 500;
+}
+
+/* 临时调试横幅 */
+.debug-banner {
+  background: #fff3cd;
+  border: 1px solid #ffe08a;
+  color: #6b3d00;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  margin: 0.75rem 0 1rem 0;
+  text-align: center;
+  font-weight: 600;
+}
+
+.debug-banner em { font-style: normal; color: #9a6b00; font-weight: 400; }
+.debug-banner .dbg-count,
+.debug-banner .dbg-files { color: #6b3d00; font-weight: 700; }
+
+      /* 调试 CSS 已移除 */
+
+/* 分组视图 */
+.psd-group {
+  margin-bottom: 1rem;
+  border: 1px solid #eef0f2;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.9rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+.group-header h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+.group-controls button {
+  margin-left: 0.5rem;
+}
+.group-controls .btn-sm-toggle.selected {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
 }
 
 .psd-item {
