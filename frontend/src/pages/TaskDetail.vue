@@ -8,6 +8,32 @@
         </button>
       </div>
     </div>
+    <!-- Lightbox 弹窗 -->
+    <div v-if="lightboxVisible" class="lightbox-overlay" @click.self="closeLightbox">
+      <div class="lightbox-content">
+        <button class="lightbox-close" @click="closeLightbox">✕</button>
+        <button class="lightbox-prev" @click="prevImage">‹</button>
+        <div class="lightbox-image-wrap"
+          @wheel="handleLightboxWheel"
+          @mousedown.prevent="onPanStart"
+          @mousemove="onPanMove"
+          @mouseup="onPanEnd"
+          @mouseleave="onPanEnd"
+          @touchstart.prevent="onPanStart"
+          @touchmove.prevent="onPanMove"
+          @touchend="onPanEnd"
+        >
+          <img :src="encodeURI(psdFiles[lightboxIndex].thumbnailUrl)" :alt="psdFiles[lightboxIndex].name"
+            :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoomScale})`, transformOrigin: originX !== null ? `${originX}px ${originY}px` : '50% 50%' }"/>
+        </div>
+        <button class="lightbox-next" @click="nextImage">›</button>
+        <div class="lightbox-controls">
+          <button @click="zoomOut">-</button>
+          <button @click="resetZoom">重置</button>
+          <button @click="zoomIn">+</button>
+        </div>
+      </div>
+    </div>
 
     <div v-if="loading" class="loading">
       加载任务详情中...
@@ -85,15 +111,17 @@
         
         <div v-else class="psd-grid">
           <div 
-            v-for="file in psdFiles" 
+            v-for="(file, idx) in psdFiles" 
             :key="file.name"
             class="psd-item"
           >
             <div class="psd-thumbnail">
               <img 
-                :src="file.thumbnailUrl" 
+                :src="encodeURI(file.thumbnailUrl)" 
                 :alt="file.name"
                 @error="handleImageError($event, file.name)"
+                @load="handleImageLoad($event, file.name)"
+                @click="openLightbox(idx)"
                 :key="file.thumbnailUrl"
               />
             </div>
@@ -302,6 +330,24 @@ export default {
       editingStatusText: '', // 编辑中的状态文本
       projectStatuses: [], // 项目允许的状态列表
       projectTags: [] // 项目允许的标签列表
+      ,
+      // Lightbox
+      lightboxVisible: false,
+      lightboxIndex: 0,
+      zoomScale: 1,
+      minZoom: 0.5,
+      maxZoom: 5
+      ,
+      // Pan/zoom state
+      translateX: 0,
+      translateY: 0,
+      isPanning: false,
+      panStartX: 0,
+      panStartY: 0,
+      lastTranslateX: 0,
+      lastTranslateY: 0,
+      originX: null,
+      originY: null
     }
   },
   computed: {
@@ -419,11 +465,8 @@ export default {
           { status: this.editingStatusText.trim() }
         )
         
-        // 更新本地数据
-        if (!this.taskInfo.frontmatter) {
-          this.taskInfo.frontmatter = {}
-        }
-        this.taskInfo.frontmatter.status = this.editingStatusText.trim()
+        // 重新加载任务详情以确保状态同步
+        await this.loadTaskDetail()
         
         this.cancelEditStatus()
       } catch (error) {
@@ -555,6 +598,11 @@ export default {
       event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHJlY3QgeD0iMzAwIiB5PSIyMDAiIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZGRkIiByeD0iMTAiLz48dGV4dCB4PSI0MDAiIHk9IjI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSIgZm9udC1zaXplPSI0OCIgZm9udC1mYW1pbHk9IkFyaWFsIj7wn5OMPC90ZXh0Pjx0ZXh0IHg9IjQwMCIgeT0iMzYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjE4IiBmb250LWZhbWlseT0iQXJpYWwiPue8qeeVpeWbvuWKoOi9veWksei0pTwvdGV4dD48dGV4dCB4PSI0MDAiIHk9IjM5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzk5OSIgZm9udC1zaXplPSIxNCIgZm9udC1mYW1pbHk9IkFyaWFsIj7or7fkuIvovb3ljp/lp4vmlofku7Y8L3RleHQ+PC9zdmc+'
       event.target.onerror = null; // 防止无限循环
     },
+
+    handleImageLoad(event, fileName) {
+      console.log('Thumbnail loaded for:', fileName);
+      console.log('Thumbnail URL (loaded):', event.target.src);
+    },
     
     formatFileSize(bytes) {
       if (bytes === 0) return '0 B'
@@ -677,6 +725,105 @@ export default {
       if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'].includes(ext)) return 'image'
       if (ext === '.svg') return 'svg'
       return 'other'
+    }
+
+    ,
+
+    // Lightbox methods
+    openLightbox(idx) {
+      this.lightboxIndex = idx
+      this.lightboxVisible = true
+      this.zoomScale = 1
+      this.translateX = 0
+      this.translateY = 0
+      this.lastTranslateX = 0
+      this.lastTranslateY = 0
+      this.originX = null
+      this.originY = null
+      document.addEventListener('keydown', this._onKeydown)
+      document.body.style.overflow = 'hidden'
+    },
+
+    closeLightbox() {
+      this.lightboxVisible = false
+      this.zoomScale = 1
+      document.removeEventListener('keydown', this._onKeydown)
+      document.body.style.overflow = ''
+    },
+
+    nextImage() {
+      if (!this.psdFiles || this.psdFiles.length === 0) return
+      this.lightboxIndex = (this.lightboxIndex + 1) % this.psdFiles.length
+      this.zoomScale = 1
+    },
+
+    prevImage() {
+      if (!this.psdFiles || this.psdFiles.length === 0) return
+      this.lightboxIndex = (this.lightboxIndex - 1 + this.psdFiles.length) % this.psdFiles.length
+      this.zoomScale = 1
+    },
+
+    zoomIn() {
+      this.zoomScale = Math.min(this.maxZoom, this.zoomScale * 1.25)
+    },
+
+    zoomOut() {
+      this.zoomScale = Math.max(this.minZoom, this.zoomScale / 1.25)
+    },
+
+    resetZoom() {
+      this.zoomScale = 1
+    },
+
+    handleLightboxWheel(e) {
+      if (e.deltaY === 0) return
+      e.preventDefault()
+      const wrap = e.currentTarget
+      const rect = wrap.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      // set origin to pointer so scale focuses there
+      this.originX = cx
+      this.originY = cy
+
+      const oldScale = this.zoomScale
+      const delta = e.deltaY > 0 ? -0.12 : 0.12
+      const newScale = Math.min(this.maxZoom, Math.max(this.minZoom, oldScale + delta))
+      this.zoomScale = newScale
+    },
+
+    onPanStart(e) {
+      this.isPanning = true
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY
+      this.panStartX = clientX
+      this.panStartY = clientY
+    },
+
+    onPanMove(e) {
+      if (!this.isPanning) return
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY
+      const dx = clientX - this.panStartX
+      const dy = clientY - this.panStartY
+      this.translateX = this.lastTranslateX + dx
+      this.translateY = this.lastTranslateY + dy
+    },
+
+    onPanEnd() {
+      if (!this.isPanning) return
+      this.isPanning = false
+      this.lastTranslateX = this.translateX
+      this.lastTranslateY = this.translateY
+    },
+
+    _onKeydown(e) {
+      if (!this.lightboxVisible) return
+      if (e.key === 'Escape') this.closeLightbox()
+      if (e.key === 'ArrowRight') this.nextImage()
+      if (e.key === 'ArrowLeft') this.prevImage()
+      if (e.key === '+') this.zoomIn()
+      if (e.key === '-') this.zoomOut()
     }
   }
 }
@@ -1349,5 +1496,73 @@ export default {
   text-align: right;
   border-top: 1px solid #e5e5e5;
   padding-top: 1rem;
+}
+
+/* Lightbox */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.lightbox-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  /* 占满整个视口，使 image-wrap 可在全屏范围内拖拽/缩放 */
+  width: 100vw;
+  height: 100vh;
+}
+.lightbox-image-wrap {
+  /* 占满父容器（整个视口），便于在全屏范围内平移 */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.lightbox-image-wrap img {
+  /* 取消 max 限制，让 transform 控制缩放和平移；保证在初始缩放下仍能自适应 */
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transition: transform 0.15s ease;
+  will-change: transform;
+  display: block;
+  margin: 0 auto;
+}
+.lightbox-close, .lightbox-prev, .lightbox-next {
+  position: absolute;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  border: none;
+  padding: 0.5rem 0.8rem;
+  font-size: 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.lightbox-close { top: 10px; right: 10px; }
+.lightbox-prev { left: 10px; top: 50%; transform: translateY(-50%); }
+.lightbox-next { right: 10px; top: 50%; transform: translateY(-50%); }
+.lightbox-controls {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+}
+.lightbox-controls button {
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  border: none;
+  background: rgba(255,255,255,0.9);
+  cursor: pointer;
 }
 </style>

@@ -15,27 +15,58 @@ router.get("/thumbnail/:projectName/:taskName/:fileName", async (req, res) => {
     const { projectName, taskName, fileName } = req.params;
     const fileExt = path.extname(fileName).toLowerCase();
 
-    // 缓存路径
+    // 根据客户端 Accept 头选择输出格式：优先 webp，否则回退 png
+    const accept = req.headers.accept || "";
+    const outFormat = accept.includes("image/webp") ? "webp" : "png";
+
+    // 缓存路径，使用文件名基础名（不含原始扩展）作为缩略图名，避免双扩展名
     const thumbnailDir = path.join(
       req.dataPath,
       ".thumbnails",
       projectName,
       taskName
     );
-    const thumbnailPath = path.join(thumbnailDir, `${fileName}.webp`);
+    const fileBaseName = path.basename(fileName, fileExt); // 去掉原始扩展名
+    const thumbnailPath = path.join(
+      thumbnailDir,
+      `${fileBaseName}.${outFormat}`
+    );
 
-    console.log("Checking thumbnail cache:", thumbnailPath);
+    console.log(
+      "Checking thumbnail cache:",
+      thumbnailPath,
+      "(outFormat:",
+      outFormat + ")"
+    );
 
     // 检查缓存是否存在
     if (await fs.pathExists(thumbnailPath)) {
       console.log("Thumbnail cache found, serving file");
       const stats = await fs.stat(thumbnailPath);
       res.set({
-        "Content-Type": "image/webp",
+        "Content-Type": outFormat === "webp" ? "image/webp" : "image/png",
         "Content-Length": stats.size,
         "Cache-Control": "public, max-age=86400", // 24小时缓存
       });
       return fs.createReadStream(thumbnailPath).pipe(res);
+    }
+
+    // 如果客户端接受 webp，但 webp 缓存不存在，且已存在 png 缓存，则直接回落并返回 png（避免生成失败导致前端显示占位符）
+    if (outFormat === "webp") {
+      const pngFallback = path.join(thumbnailDir, `${fileBaseName}.png`);
+      if (await fs.pathExists(pngFallback)) {
+        console.log(
+          "WebP cache missing; serving existing PNG fallback:",
+          pngFallback
+        );
+        const stats = await fs.stat(pngFallback);
+        res.set({
+          "Content-Type": "image/png",
+          "Content-Length": stats.size,
+          "Cache-Control": "public, max-age=86400",
+        });
+        return fs.createReadStream(pngFallback).pipe(res);
+      }
     }
 
     // 原始文件路径
@@ -49,14 +80,14 @@ router.get("/thumbnail/:projectName/:taskName/:fileName", async (req, res) => {
 
     console.log("Generating thumbnail for:", filePath);
 
-    // 根据文件类型生成缩略图
-    await generateThumbnail(filePath, thumbnailPath, fileExt);
+    // 根据文件类型生成缩略图（支持输出格式）
+    await generateThumbnail(filePath, thumbnailPath, fileExt, outFormat);
 
     // 返回生成的缩略图
     if (await fs.pathExists(thumbnailPath)) {
       const stats = await fs.stat(thumbnailPath);
       res.set({
-        "Content-Type": "image/webp",
+        "Content-Type": outFormat === "webp" ? "image/webp" : "image/png",
         "Content-Length": stats.size,
         "Cache-Control": "public, max-age=86400",
       });
@@ -107,16 +138,28 @@ router.delete("/:projectName/:taskName/:fileName", async (req, res) => {
     // 删除原文件
     await fs.remove(filePath);
 
-    // 删除对应的缩略图
-    const thumbnailPath = path.join(
+    // 删除对应的缩略图（同时删除 webp 与 png 缓存），使用基础名
+    const fileExtToRemove = path.extname(fileName).toLowerCase();
+    const fileBaseToRemove = path.basename(fileName, fileExtToRemove);
+    const thumbnailPathWebp = path.join(
       req.dataPath,
       ".thumbnails",
       projectName,
       taskName,
-      `${fileName}.webp`
+      `${fileBaseToRemove}.webp`
     );
-    if (await fs.pathExists(thumbnailPath)) {
-      await fs.remove(thumbnailPath);
+    const thumbnailPathPng = path.join(
+      req.dataPath,
+      ".thumbnails",
+      projectName,
+      taskName,
+      `${fileBaseToRemove}.png`
+    );
+    if (await fs.pathExists(thumbnailPathWebp)) {
+      await fs.remove(thumbnailPathWebp);
+    }
+    if (await fs.pathExists(thumbnailPathPng)) {
+      await fs.remove(thumbnailPathPng);
     }
 
     // 删除README中对应的文件描述
@@ -134,7 +177,12 @@ router.delete("/:projectName/:taskName/:fileName", async (req, res) => {
 });
 
 // 生成缩略图的主函数
-async function generateThumbnail(filePath, thumbnailPath, fileExt) {
+async function generateThumbnail(
+  filePath,
+  thumbnailPath,
+  fileExt,
+  outFormat = "webp"
+) {
   await fs.ensureDir(path.dirname(thumbnailPath));
 
   try {
@@ -152,19 +200,19 @@ async function generateThumbnail(filePath, thumbnailPath, fileExt) {
     ) {
       // 普通图片文件，使用Sharp直接处理
       console.log(`Processing image file: ${filePath} (${fileExt})`);
-      await generateImageThumbnail(filePath, thumbnailPath);
+      await generateImageThumbnail(filePath, thumbnailPath, outFormat);
     } else if (fileExt === ".psd") {
       // PSD文件，使用Sharp或ImageMagick
-      await generatePsdThumbnail(filePath, thumbnailPath);
+      await generatePsdThumbnail(filePath, thumbnailPath, outFormat);
     } else if (fileExt === ".ai") {
       // AI文件，使用ImageMagick
-      await generateAiThumbnail(filePath, thumbnailPath);
+      await generateAiThumbnail(filePath, thumbnailPath, outFormat);
     } else if (fileExt === ".svg") {
       // SVG文件，使用Sharp
-      await generateSvgThumbnail(filePath, thumbnailPath);
+      await generateSvgThumbnail(filePath, thumbnailPath, outFormat);
     } else {
       // 不支持的格式，生成占位符
-      await generatePlaceholderThumbnail(thumbnailPath, fileExt);
+      await generatePlaceholderThumbnail(thumbnailPath, fileExt, outFormat);
     }
 
     // 验证缩略图是否生成成功
@@ -199,15 +247,31 @@ async function generateThumbnail(filePath, thumbnailPath, fileExt) {
 async function generateImageThumbnail(filePath, thumbnailPath) {
   console.log(`Generating image thumbnail for ${filePath}`);
   try {
-    await sharp(filePath)
-      .rotate() // 自动根据EXIF旋转图片
-      .resize(800, 800, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 85 })
-      .toFile(thumbnailPath);
+    const pipeline = sharp(filePath)
+      .rotate()
+      .resize(800, 800, { fit: "inside", withoutEnlargement: true });
+    if (path.extname(thumbnailPath).toLowerCase() === ".webp") {
+      pipeline.webp({ quality: 85 });
+    } else {
+      pipeline.png({ quality: 85 });
+    }
+    await pipeline.toFile(thumbnailPath);
     console.log(`Image thumbnail generated successfully: ${thumbnailPath}`);
   } catch (error) {
-    console.error(`Failed to generate image thumbnail: ${error.message}`);
-    throw error;
+    console.error(
+      `Failed to generate image thumbnail with Sharp: ${error.message}`
+    );
+    // 如果 Sharp 不能处理某些图片（例如缺少 JPEG delegate），尝试使用 ImageMagick 回退
+    try {
+      console.log("Falling back to ImageMagick for image thumbnail generation");
+      await generateThumbnailWithImageMagick(filePath, thumbnailPath);
+      console.log(
+        `Image thumbnail generated successfully with ImageMagick: ${thumbnailPath}`
+      );
+    } catch (magickError) {
+      console.error(`ImageMagick fallback also failed: ${magickError.message}`);
+      throw magickError;
+    }
   }
 }
 
@@ -216,15 +280,15 @@ async function generatePsdThumbnail(filePath, thumbnailPath) {
   console.log(`Generating PSD thumbnail for ${filePath}`);
   try {
     // 首先尝试Sharp，只读取PSD保存状态下的静态合成图像
-    await sharp(filePath, {
-      page: 0, // 只读取第一页（合成预览图）
-      animated: false, // 禁用动图处理
-      density: 150, // 使用更高分辨率
-    })
-      .flatten({ background: { r: 255, g: 255, b: 255 } }) // 将透明背景合并为白色
-      .resize(800, 800, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 85 })
-      .toFile(thumbnailPath);
+    const pipeline = sharp(filePath, { page: 0, animated: false, density: 150 })
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .resize(800, 800, { fit: "inside", withoutEnlargement: true });
+    if (path.extname(thumbnailPath).toLowerCase() === ".webp") {
+      pipeline.webp({ quality: 85 });
+    } else {
+      pipeline.png({ quality: 85 });
+    }
+    await pipeline.toFile(thumbnailPath);
     console.log(
       `PSD thumbnail generated successfully with Sharp: ${thumbnailPath}`
     );
@@ -253,10 +317,16 @@ async function generateAiThumbnail(filePath, thumbnailPath) {
 async function generateSvgThumbnail(filePath, thumbnailPath) {
   console.log(`Generating SVG thumbnail for ${filePath}`);
   try {
-    await sharp(filePath)
-      .resize(800, 800, { fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 85 })
-      .toFile(thumbnailPath);
+    const pipeline = sharp(filePath).resize(800, 800, {
+      fit: "inside",
+      withoutEnlargement: true,
+    });
+    if (path.extname(thumbnailPath).toLowerCase() === ".webp") {
+      pipeline.webp({ quality: 85 });
+    } else {
+      pipeline.png({ quality: 85 });
+    }
+    await pipeline.toFile(thumbnailPath);
     console.log(`SVG thumbnail generated successfully: ${thumbnailPath}`);
   } catch (error) {
     console.error(`Failed to generate SVG thumbnail: ${error.message}`);
@@ -273,19 +343,22 @@ async function generateThumbnailWithImageMagick(
   console.log(`Generating thumbnail with ImageMagick for ${filePath}`);
   return new Promise((resolve, reject) => {
     const inputFile = filePath + pageSelector;
-    const magick = spawn("magick", [
+    const args = [
       inputFile,
-      "-coalesce", // 确保获取完整的合成图像
-      "-flatten", // 将所有图层合并为单一静态图像
+      "-coalesce",
+      "-flatten",
       "-background",
-      "white", // 设置透明背景为白色
+      "white",
       "-thumbnail",
       "800x800>",
       "-quality",
       "85",
-      "-strip", // 移除元数据
-      thumbnailPath,
-    ]);
+      "-strip",
+    ];
+    // 如果输出不是 webp，ImageMagick 会根据输出后缀决定格式（例如 .png）
+    args.push(thumbnailPath);
+
+    const magick = spawn("magick", args);
 
     let stderr = "";
 
@@ -308,22 +381,21 @@ async function generateThumbnailWithImageMagick(
   });
 }
 
-// 生成占位符缩略图
-async function generatePlaceholderThumbnail(thumbnailPath, fileExt) {
+// 生成占位符缩略图，支持根据输出路径后缀选择格式
+async function generatePlaceholderThumbnail(thumbnailPath, fileExt, outFormat) {
   console.log(`Generating placeholder thumbnail for ${fileExt}`);
   const placeholderText = getFileTypeText(fileExt);
 
-  await sharp({
+  const pipeline = sharp({
     create: {
       width: 800,
       height: 600,
       channels: 4,
       background: { r: 240, g: 240, b: 240, alpha: 1 },
     },
-  })
-    .composite([
-      {
-        input: Buffer.from(`
+  }).composite([
+    {
+      input: Buffer.from(`
       <svg width="800" height="600">
         <rect width="800" height="600" fill="#f0f0f0" stroke="#ddd" stroke-width="2"/>
         <text x="400" y="280" font-family="Arial, sans-serif" font-size="24" text-anchor="middle" fill="#666">
@@ -334,12 +406,20 @@ async function generatePlaceholderThumbnail(thumbnailPath, fileExt) {
         </text>
       </svg>
     `),
-        top: 0,
-        left: 0,
-      },
-    ])
-    .webp({ quality: 85 })
-    .toFile(thumbnailPath);
+      top: 0,
+      left: 0,
+    },
+  ]);
+
+  const ext =
+    outFormat || path.extname(thumbnailPath).replace(".", "").toLowerCase();
+  if (ext === "webp") {
+    pipeline.webp({ quality: 85 });
+  } else {
+    pipeline.png({ quality: 85 });
+  }
+
+  await pipeline.toFile(thumbnailPath);
   console.log(`Placeholder thumbnail generated: ${thumbnailPath}`);
 }
 

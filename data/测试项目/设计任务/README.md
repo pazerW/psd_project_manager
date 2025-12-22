@@ -1,7 +1,7 @@
 ---
 title: 设计任务
 description: 测试PSD文件描述功能
-status: pending
+status: cancelled
 fileTags:
   test-image.jpg: 你好不知道
   测试项目_设计任务_3.psd: 最终版
