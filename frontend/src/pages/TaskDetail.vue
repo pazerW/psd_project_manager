@@ -136,11 +136,11 @@
                 @click="openLightbox(idx)"
                 :key="file.thumbnailUrl"
               />
-              <div  class="file-type-badge psd-badge">{{ getFileType(file.name) }}</div>
+              <div :class="['file-type-badge', isRedFile(file.name) ? 'badge-red' : 'psd-badge']">{{ getFileType(file.name) }}</div>
             </div>
             <div class="psd-info">
                     <h4>
-                      <span class="inline-psd-badge psd-badge">{{ getFileType(file.name) }}</span>
+                      <span :class="['inline-psd-badge', isRedFile(file.name) ? 'badge-red' : 'psd-badge']">{{ getFileType(file.name) }}</span>
                       {{ file.name }}
                     </h4>
               <p class="file-size">{{ formatFileSize(file.size) }}</p>
@@ -257,7 +257,7 @@
                 :key="file.name"
                 class="psd-item"
               >
-                <div class="psd-thumbnail">
+                  <div class="psd-thumbnail">
                   <img 
                     :src="encodeURI(file.thumbnailUrl)" 
                     :alt="file.name"
@@ -266,7 +266,7 @@
                     @click="openLightboxByName(file.name)"
                     :key="file.thumbnailUrl"
                   />
-                  <div class="file-type-badge psd-badge">{{ getFileType(file.name) }}</div>
+                  <div :class="['file-type-badge', isRedFile(file.name) ? 'badge-red' : 'psd-badge']">{{ getFileType(file.name) }}</div>
                 </div>
                   <div class="psd-info">
                     <h4>{{ file.name }}</h4>
@@ -1021,6 +1021,12 @@ export default {
       return 'Other'
     },
 
+    // 是否使用红色徽章（PSD 或 AI）
+    isRedFile(fileName) {
+      const t = this.getFileType(fileName)
+      return t === 'PSD' || t === 'AI'
+    },
+
     // 排序与分组功能
     setSortMode(mode) {
       if (mode !== 'asc' && mode !== 'desc') return
@@ -1485,6 +1491,12 @@ export default {
 }
 .psd-badge {
   background: linear-gradient(135deg,#31a8ff 0%,#0078d4 100%);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+/* 红色徽章用于 PSD / AI */
+.badge-red {
+  background: linear-gradient(135deg,#ff6b6b 0%,#d90429 100%);
   box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 
