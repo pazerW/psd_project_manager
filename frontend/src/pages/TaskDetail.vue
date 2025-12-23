@@ -2,6 +2,25 @@
   <div class="task-detail">
     <div class="page-header">
       <h2>{{ taskName }}</h2>
+
+      <div class="header-status" v-if="taskInfo">
+        <div v-if="canEditStatus" class="status-select">
+          <select
+            v-model="taskInfo.frontmatter.status"
+            :disabled="savingStatus"
+            class="status-select-input header-status-select"
+            @change="changeStatus(taskInfo.frontmatter.status)"
+          >
+            <option value="" disabled>选择状态</option>
+            <option v-for="status in projectStatuses" :key="status" :value="status">{{ status }}</option>
+          </select>
+        </div>
+        <div v-else class="status-current-wrap">
+          <span class="status-current">{{ taskInfo.frontmatter?.status || '未设置' }}</span>
+        </div>
+        <span v-if="!isStatusInAllowedList && taskInfo.frontmatter?.status" class="status-note" title="此状态未在项目README中定义，建议修改为允许的状态">⚠️ 自定义状态</span>
+      </div>
+
       <div class="task-actions">
         <button class="btn btn-primary" @click="showUpload = true">
           上传文件
@@ -44,30 +63,7 @@
       <div class="readme-section card">
         <h3>任务说明</h3>
         <div v-if="taskInfo.frontmatter" class="frontmatter">
-          <div class="meta-item">
-            <strong>状态：</strong>
-
-              <!-- 直接展示所有可选状态，点击即时保存 -->
-              <div v-if="canEditStatus" class="status-options-inline">
-                <button
-                  v-for="status in projectStatuses"
-                  :key="status"
-                  :class="['status-option-btn', (taskInfo.frontmatter && taskInfo.frontmatter.status) === status ? 'selected' : '']"
-                  :disabled="savingStatus"
-                  @click="changeStatus(status)"
-                >
-                  {{ status }}
-                </button>
-              </div>
-
-              <span 
-                v-if="!isStatusInAllowedList && taskInfo.frontmatter.status" 
-                class="status-note"
-                title="此状态未在项目README中定义，建议修改为允许的状态"
-              >
-                ⚠️ 自定义状态
-              </span>
-            </div>
+          <!-- 状态卡已移除，状态显示移至页面标题后 -->
           </div>
           <div v-if="taskInfo.frontmatter.prompt" class="meta-item">
             <strong>AI提示词：</strong>
@@ -148,9 +144,13 @@
                 @click="openLightbox(idx)"
                 :key="file.thumbnailUrl"
               />
+              <div v-if="getFileType(file.name) === 'psd'" class="file-type-badge psd-badge">PSD</div>
             </div>
             <div class="psd-info">
-              <h4>{{ file.name }}</h4>
+                    <h4>
+                      <span v-if="getFileType(file.name) === 'psd'" class="inline-psd-badge psd-badge">PSD</span>
+                      {{ file.name }}
+                    </h4>
               <p class="file-size">{{ formatFileSize(file.size) }}</p>
               <p class="file-date">{{ formatDate(file.modified) }}</p>
               
@@ -274,6 +274,7 @@
                     @click="openLightboxByName(file.name)"
                     :key="file.thumbnailUrl"
                   />
+                  <div v-if="getFileType(file.name) === 'psd'" class="file-type-badge psd-badge">PSD</div>
                 </div>
                   <div class="psd-info">
                     <h4>{{ file.name }}</h4>
@@ -1452,12 +1453,45 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 
 .psd-thumbnail img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* PSD 文件角标 */
+.file-type-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  pointer-events: none;
+  z-index: 2;
+}
+.psd-badge {
+  background: linear-gradient(135deg,#31a8ff 0%,#0078d4 100%);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+/* 内联文件名前的 PSD badge */
+.inline-psd-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-right: 0.5rem;
+  vertical-align: middle;
 }
 
 .psd-info {
@@ -1469,6 +1503,24 @@ export default {
   color: #2c3e50;
   font-size: 1rem;
   word-break: break-all;
+}
+
+/* 页面头部状态显示 */
+.header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: 1rem;
+}
+.header-status .status-current {
+  font-size: 0.95rem;
+  color: #2c3e50;
+  background: #f1f5f9;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+.header-status .header-status-select {
+  min-width: 180px;
 }
 
 .file-size,
