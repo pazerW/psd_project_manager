@@ -297,6 +297,13 @@ export default {
     await this.loadStatusConfig()
     await this.loadProjects()
 
+    // 确保首页显示全称（与 index.html 保持一致）
+    try {
+      document.title = 'Design Project Management'
+    } catch (e) {
+      // 非浏览器环境忽略
+    }
+
     // 监听后端文件变更事件，自动刷新项目列表
     if (typeof window !== 'undefined') {
       this._onDataChanged = (e) => {

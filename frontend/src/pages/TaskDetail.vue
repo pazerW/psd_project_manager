@@ -60,18 +60,10 @@
 
     <div v-else class="task-content">
       <!-- README 内容区域 -->
-      <div class="readme-section card">
-        <h3>任务说明</h3>
-        <div v-if="taskInfo.frontmatter" class="frontmatter">
-          <!-- 状态卡已移除，状态显示移至页面标题后 -->
-          </div>
-          <div v-if="taskInfo.frontmatter.prompt" class="meta-item">
-            <strong>AI提示词：</strong>
-            <p class="prompt">{{ taskInfo.frontmatter.prompt }}</p>
-          </div>
-        </div>
+      <div class="readme-section">
+        
         <div v-if="taskInfo.readmeContent" class="readme-wrapper">
-          <h4 class="readme-title">README</h4>
+          <h1 class="readme-title">README</h1>
           <hr class="readme-sep" />
           <div class="readme-content" v-html="renderedReadme"></div>
         </div>
@@ -144,11 +136,11 @@
                 @click="openLightbox(idx)"
                 :key="file.thumbnailUrl"
               />
-              <div v-if="getFileType(file.name) === 'psd'" class="file-type-badge psd-badge">PSD</div>
+              <div  class="file-type-badge psd-badge">{{ getFileType(file.name) }}</div>
             </div>
             <div class="psd-info">
                     <h4>
-                      <span v-if="getFileType(file.name) === 'psd'" class="inline-psd-badge psd-badge">PSD</span>
+                      <span class="inline-psd-badge psd-badge">{{ getFileType(file.name) }}</span>
                       {{ file.name }}
                     </h4>
               <p class="file-size">{{ formatFileSize(file.size) }}</p>
@@ -274,7 +266,7 @@
                     @click="openLightboxByName(file.name)"
                     :key="file.thumbnailUrl"
                   />
-                  <div v-if="getFileType(file.name) === 'psd'" class="file-type-badge psd-badge">PSD</div>
+                  <div class="file-type-badge psd-badge">{{ getFileType(file.name) }}</div>
                 </div>
                   <div class="psd-info">
                     <h4>{{ file.name }}</h4>
@@ -454,6 +446,7 @@
         </div>
       </div>
     </div>
+  </div>
 </template>
 
 <script>
@@ -683,6 +676,13 @@ export default {
         
         // 加载项目中配置的标签
         await this.loadProjectTags()
+        
+        // 更新页面标题为：DPM - 项目名称 - 任务名称
+        try {
+          document.title = `DPM - ${this.projectName} - ${this.taskName}`
+        } catch (e) {
+          // 非浏览器环境安全忽略
+        }
         
       } catch (error) {
         console.error('Failed to load task detail:', error)
@@ -969,26 +969,27 @@ export default {
       this.editingTagsText = ''
     },
 
-    async saveTags(fileName) {
-      if (!this.editingTagsText || !this.editingTagsText.trim()) {
+    async saveTags(fileName, selectedTag) {
+      const value = (typeof selectedTag === 'string' && selectedTag.trim()) ? selectedTag.trim() : (this.editingTagsText && this.editingTagsText.trim() ? this.editingTagsText.trim() : '')
+      if (!value) {
         alert('请选择一个标签')
         return
       }
-      
+
       try {
-        const tags = this.editingTagsText.trim()
-        
+        const tags = value
+
         await axios.put(
           `/api/tasks/${this.projectName}/${this.taskName}/files/${fileName}/tags`,
           { tags }
         )
-        
+
         // 更新本地数据
         const fileIndex = this.psdFiles.findIndex(f => f.name === fileName)
         if (fileIndex !== -1) {
           this.psdFiles[fileIndex].tags = tags
         }
-        
+
         this.cancelEditTags()
       } catch (error) {
         console.error('保存标签失败:', error)
@@ -1013,11 +1014,11 @@ export default {
     // 获取文件类型
     getFileType(fileName) {
       const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'))
-      if (ext === '.psd') return 'psd'
-      if (ext === '.ai') return 'ai'  
-      if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'].includes(ext)) return 'image'
-      if (ext === '.svg') return 'svg'
-      return 'other'
+      if (ext === '.psd') return 'PSD'
+      if (ext === '.ai') return 'AI'  
+      if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'].includes(ext)) return 'IMG'
+      if (ext === '.svg') return 'sSVG'
+      return 'Other'
     },
 
     // 排序与分组功能
@@ -1182,9 +1183,15 @@ export default {
 .page-header {
   margin-bottom: 2rem;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  gap: 0.75rem;
 }
+
+.page-header .task-actions {
+  margin-left: auto;
+}
+
 
 .page-header h2 {
   color: #2c3e50;
@@ -1466,7 +1473,7 @@ export default {
 .file-type-badge {
   position: absolute;
   top: 8px;
-  right: 8px;
+  left: 8px;
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 0.75rem;
