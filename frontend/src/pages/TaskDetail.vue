@@ -128,8 +128,8 @@
               class="psd-item"
             >
             <div class="psd-thumbnail">
-              <img 
-                :src="encodeURI(file.thumbnailUrl)" 
+                  <img 
+                    :src="file.thumbnailUrl" 
                 :alt="file.name"
                 @error="handleImageError($event, file.name)"
                 @load="handleImageLoad($event, file.name)"
@@ -259,7 +259,7 @@
               >
                   <div class="psd-thumbnail">
                   <img 
-                    :src="encodeURI(file.thumbnailUrl)" 
+                    :src="file.thumbnailUrl" 
                     :alt="file.name"
                     @error="handleImageError($event, file.name)"
                     @load="handleImageLoad($event, file.name)"

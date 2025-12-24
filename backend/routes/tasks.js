@@ -118,8 +118,12 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
           size: stats.size,
           modified: stats.mtime,
           type: getFileType(ext),
-          downloadUrl: `/api/files/download/${projectName}/${taskName}/${file}`,
-          thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${file}`,
+          downloadUrl: `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
+            file
+          )}`,
+          thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
+            file
+          )}`,
           tags: fileTags[file] || "", // 添加标签
         });
       }
@@ -432,8 +436,12 @@ async function analyzeTaskDetails(taskPath, taskName, projectName) {
           size: stats.size,
           modified: stats.mtime,
           type: getFileType(ext),
-          downloadUrl: `/api/files/download/${projectName}/${taskName}/${file}`,
-          thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${file}`,
+          downloadUrl: `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
+            file
+          )}`,
+          thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
+            file
+          )}`,
           description: psdDescriptions[file] || "",
           tags: fileTags[file] || "", // 添加标签
         });

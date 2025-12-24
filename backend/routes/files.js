@@ -105,23 +105,101 @@ router.get("/thumbnail/:projectName/:taskName/:fileName", async (req, res) => {
 // 下载文件
 router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
   try {
-    const { projectName, taskName, fileName } = req.params;
-    const filePath = path.join(req.dataPath, projectName, taskName, fileName);
+    const { projectName, taskName } = req.params;
+    let { fileName } = req.params;
 
-    if (!(await fs.pathExists(filePath))) {
+    // 有时候客户端可能会对路径片段进行双重编码，尝试解码一次以获得文件系统上的真实名称
+    try {
+      fileName = decodeURIComponent(fileName);
+    } catch (e) {
+      // ignore and keep original if decode fails
+    }
+
+    // 记录调试信息（便于在 NAS 环境排查编码/路径问题）
+    console.log('[Download] params:', { projectName, taskName, fileName: req.params.fileName });
+
+    // 防止路径遍历
+    if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
+      return res.status(400).json({ error: "Invalid file name" });
+    }
+
+    const filePath = path.join(req.dataPath, projectName, taskName, fileName);
+    const resolved = path.resolve(filePath);
+    console.log('[Download] resolvedPath:', resolved);
+    console.log('[Download] dataPath base:', path.resolve(req.dataPath));
+    const base = path.resolve(req.dataPath) + path.sep;
+    if (!resolved.startsWith(base)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    let exists = await fs.pathExists(resolved);
+    console.log('[Download] file exists:', exists);
+
+    // 如果直接路径不存在，尝试在目录中匹配 Unicode 正规化差异（NFC/NFD）或相似名称（NAS 与 macOS 常见问题）
+    if (!exists) {
+      try {
+        const dir = path.dirname(resolved);
+        console.log('[Download] attempting fallback filename match in dir:', dir);
+        const entries = await fs.readdir(dir);
+        const requested = fileName;
+        const normalizedRequested = requested && requested.normalize ? requested.normalize('NFC') : requested;
+
+        let matched = entries.find((entry) => {
+          if (entry === requested) return true;
+          if (entry.normalize) {
+            const eNFC = entry.normalize('NFC');
+            const eNFD = entry.normalize('NFD');
+            if (eNFC === normalizedRequested || eNFD === normalizedRequested) return true;
+          }
+          return false;
+        });
+
+        if (matched) {
+          const oldResolved = resolved;
+          resolved = path.join(dir, matched);
+          console.log('[Download] fallback matched file:', matched, 'oldResolved=', oldResolved, 'newResolved=', resolved);
+          exists = await fs.pathExists(resolved);
+        } else {
+          console.log('[Download] no fallback match found in directory entries');
+        }
+      } catch (err) {
+        console.error('[Download] fallback readdir error:', err);
+      }
+    }
+
+    if (!exists) {
       return res.status(404).json({ error: "File not found" });
     }
 
-    const stats = await fs.stat(filePath);
+    const stats = await fs.stat(resolved);
+
+    // 为非 ASCII 名称兼容浏览器，使用 filename*（RFC5987）
+    // filename 参数只能使用 ASCII，对于中文文件名使用 encodeURIComponent 后的值或简化名称
+    const hasNonAscii = /[^\x00-\x7F]/.test(fileName);
+    const fallbackName = hasNonAscii ? 'file' + path.extname(fileName) : fileName.replace(/\"/g, '\\"');
+    const disposition = `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+
     res.set({
       "Content-Type": "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Disposition": disposition,
       "Content-Length": stats.size,
     });
 
-    fs.createReadStream(filePath).pipe(res);
+    const stream = fs.createReadStream(resolved);
+    stream.on('error', (err) => {
+      console.error('File stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to read file' });
+      } else {
+        res.destroy();
+      }
+    });
+    stream.pipe(res);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Download error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
