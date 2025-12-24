@@ -42,7 +42,7 @@
           @touchmove.prevent="onPanMove"
           @touchend="onPanEnd"
         >
-          <img :src="encodeURI(psdFiles[lightboxIndex].thumbnailUrl)" :alt="psdFiles[lightboxIndex].name"
+          <img v-if="psdFiles && psdFiles[lightboxIndex]" :src="psdFiles[lightboxIndex].thumbnailUrl" :alt="psdFiles[lightboxIndex].name"
             :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoomScale})`, transformOrigin: originX !== null ? `${originX}px ${originY}px` : '50% 50%' }"/>
         </div>
         <button class="lightbox-next" @click="nextImage">›</button>
@@ -133,7 +133,7 @@
                 :alt="file.name"
                 @error="handleImageError($event, file.name)"
                 @load="handleImageLoad($event, file.name)"
-                @click="openLightbox(idx)"
+                @click="openLightboxByName(file.name)"
                 :key="file.thumbnailUrl"
               />
               <div :class="['file-type-badge', isRedFile(file.name) ? 'badge-red' : 'psd-badge']">{{ getFileType(file.name) }}</div>
