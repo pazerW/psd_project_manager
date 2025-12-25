@@ -374,6 +374,18 @@
       </div>
     </div>
 
+    <!-- 删除确认弹窗 -->
+    <div v-if="deleteConfirmVisible" class="confirm-modal" @click.self="cancelDelete">
+      <div class="confirm-dialog">
+        <h3>确认删除</h3>
+        <p>确定要删除文件 “{{ deleteTargetFile }}” 吗？此操作不可恢复。</p>
+        <div class="dialog-actions">
+          <button class="btn btn-secondary" @click="cancelDelete">取消</button>
+          <button class="btn btn-danger" @click="performDeleteFile">确认删除</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 上传对话框 -->
     <div v-if="showUpload" class="upload-modal" @click.self="showUpload = false">
       <div class="upload-dialog">
@@ -502,6 +514,10 @@ export default {
       lastTranslateY: 0,
       originX: null,
       originY: null
+      ,
+      // 删除确认
+      deleteConfirmVisible: false,
+      deleteTargetFile: ''
     }
   },
   computed: {
@@ -875,13 +891,29 @@ export default {
       this.showUpload = false
     },
     
-    async deleteFile(fileName) {
+    // 弹出删除确认框（由 UI 按钮调用）
+    deleteFile(fileName) {
+      this.deleteTargetFile = fileName
+      this.deleteConfirmVisible = true
+    },
+
+    // 用户在确认弹窗中点击确认后执行实际删除
+    async performDeleteFile() {
+      const fileName = this.deleteTargetFile
+      this.deleteConfirmVisible = false
+      this.deleteTargetFile = ''
       try {
         await axios.delete(`/api/files/${this.projectName}/${this.taskName}/${fileName}`)
         await this.loadTaskDetail() // 重新加载文件列表
       } catch (error) {
         console.error('Failed to delete file:', error)
+        alert('删除文件失败：' + (error.response?.data?.error || error.message))
       }
+    },
+
+    cancelDelete() {
+      this.deleteConfirmVisible = false
+      this.deleteTargetFile = ''
     },
     
     handleImageError(event, fileName) {
@@ -2114,4 +2146,30 @@ export default {
   background: rgba(255,255,255,0.9);
   cursor: pointer;
 }
+
+/* 删除确认弹窗样式 */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1600;
+}
+.confirm-dialog {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  max-width: 480px;
+  width: 92%;
+  box-shadow: 0 8px 30px rgba(2,6,23,0.2);
+}
+.confirm-dialog h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  color: #222;
+}
+.confirm-dialog p { color: #444; margin: 0.25rem 0 0 0; }
+.confirm-dialog .dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
 </style>
