@@ -370,6 +370,15 @@ export default {
     }
   },
   async mounted() {
+    // 从路由查询恢复筛选状态和视图模式（如果存在）
+    try {
+      const q = (this.$route && this.$route.query) || {}
+      if (q.status) this.selectedStatus = q.status
+      if (q.view) this.viewMode = q.view
+    } catch (e) {
+      // ignore
+    }
+
     await this.loadProject()
 
     // 监听 README 变更，仅当变更影响当前项目时重新加载
@@ -437,6 +446,13 @@ export default {
         this.tagFileCount = 0
       }
     }
+    ,
+    selectedStatus(newVal) {
+      this.updateRouteQuery()
+    },
+    viewMode(newVal) {
+      this.updateRouteQuery()
+    }
   },
   methods: {
     async loadProject() {
@@ -448,7 +464,10 @@ export default {
         console.debug('[debug] loadProject response status:', projectResponse.data && projectResponse.data.status)
         this.projectInfo = projectResponse.data
         this.allTasks = projectResponse.data.tasks || []
-        this.selectedStatus = 'all'
+        // 仅在路由查询未指定时才重置为默认 'all'
+        if (!this.$route || !this.$route.query || !this.$route.query.status) {
+          this.selectedStatus = 'all'
+        }
         // 更新页面标题为 DPM - [项目Name]
         try {
           document.title = `DPM - ${this.projectName}`
@@ -477,7 +496,9 @@ export default {
     },
     
     goToTask(taskName) {
-      this.$router.push(`/project/${this.projectName}/task/${taskName}`)
+      // 导航到任务详情时携带当前查询参数，便于返回时恢复筛选状态
+      const q = (this.$route && this.$route.query) ? { ...this.$route.query } : {}
+      this.$router.push({ path: `/project/${this.projectName}/task/${taskName}`, query: q })
     },
     
     getStatusCount(status) {
@@ -630,6 +651,28 @@ export default {
     loadStatuses() {
       // 不再从localStorage加载，而是从项目README中加载（在loadProject中处理）
       // 这个方法现在可以删除，但保留作为占位符以防需要
+    }
+    ,
+    updateRouteQuery() {
+      try {
+        const q = { ...(this.$route && this.$route.query ? this.$route.query : {}) }
+        // 仅在非默认值时写入查询，保持 URL 简洁
+        if (this.selectedStatus && this.selectedStatus !== 'all') {
+          q.status = this.selectedStatus
+        } else {
+          delete q.status
+        }
+
+        if (this.viewMode && this.viewMode !== 'grid') {
+          q.view = this.viewMode
+        } else {
+          delete q.view
+        }
+
+        this.$router.replace({ path: `/project/${this.projectName}`, query: q })
+      } catch (e) {
+        // ignore
+      }
     }
   }
 }
