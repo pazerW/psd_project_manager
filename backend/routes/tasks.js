@@ -135,6 +135,46 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
   }
 });
 
+// 设置任务的默认文件（将 frontmatter.defaultFile 更新为指定文件名）
+router.post("/:projectName/:taskName/default-file", async (req, res) => {
+  try {
+    const { projectName, taskName } = req.params;
+    const { fileName } = req.body || {};
+
+    if (!fileName)
+      return res.status(400).json({ error: "fileName is required" });
+
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const readmePath = path.join(taskPath, "README.md");
+
+    if (!(await fs.pathExists(taskPath))) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    // 验证文件存在
+    const filePath = path.join(taskPath, fileName);
+    if (!(await fs.pathExists(filePath))) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    await fs.ensureFile(readmePath);
+    const content = await fs.readFile(readmePath, "utf8");
+    const parsed = matter(content);
+    const front = parsed.data || {};
+
+    front.defaultFile = fileName;
+    front.updatedAt = Date.now();
+
+    const updated = matter.stringify(parsed.content || "", front);
+    await fs.writeFile(readmePath, updated, "utf8");
+
+    // 返回更新后的 frontmatter
+    res.json({ success: true, defaultFile: front.defaultFile });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 更新文件描述
 router.put(
   "/:projectName/:taskName/files/:fileName/description",

@@ -401,10 +401,23 @@ async function analyzeTask(taskPath, taskName) {
       }
     }
 
-    // 计算PSD文件数量
+    // 计算任务中存在的设计文件数量（包括 PSD/AI/图片 等常见格式）
     const files = await fs.readdir(taskPath);
-    psdFiles = files.filter(
-      (file) => path.extname(file).toLowerCase() === ".psd"
+    const validExtensions = [
+      ".psd",
+      ".ai",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".gif",
+      ".bmp",
+      ".webp",
+      ".svg",
+      ".tiff",
+      ".tif",
+    ];
+    psdFiles = files.filter((f) =>
+      validExtensions.includes(path.extname(f).toLowerCase())
     ).length;
   } catch (error) {
     console.error(`Error analyzing task ${taskName}:`, error);
@@ -414,7 +427,9 @@ async function analyzeTask(taskPath, taskName) {
     name: taskName,
     path: taskPath,
     status,
+    // 保持向后兼容：psdFiles 继续表示设计文件总数（以前为 PSD 数量，现在扩展为所有设计格式）
     psdFiles,
+    fileCount: psdFiles,
     ...taskInfo,
   };
 }

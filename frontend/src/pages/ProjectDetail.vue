@@ -83,17 +83,22 @@
         @click="goToTask(task.name)"
       >
         <div class="task-header">
-          <h3>{{ task.name }}</h3>
-          <span :class="`status-badge status-${task.status}`">
+          <h3>
+            {{ task.name }}
+            <span class="inline-file-count">{{ (task.fileCount !== undefined ? task.fileCount : (task.psdFiles || 0)) }}</span>
+          </h3>
+          <span :class="`status-badge status-${task.status}`" :style="getStatusStyle(task.status)">
             {{ task.status }}
           </span>
         </div>
         
-        <div class="task-stats">
-          <div class="stat">
-            <span class="stat-number">{{ task.psdFiles || 0 }}</span>
-            <span class="stat-label">文件数</span>
-          </div>
+        <!-- 默认文件缩略图（显示逻辑使用可用的缩略图 URL） -->
+        <div v-if="getTaskThumbnailUrl(task)" class="task-thumbnail">
+          <img
+            :src="getTaskThumbnailUrl(task)"
+            :alt="(task.frontmatter && task.frontmatter.defaultFile) || task.defaultFile || ''"
+            @error="handleThumbError($event, task)"
+          />
         </div>
         
         <div v-if="task.description" class="task-description">
@@ -220,21 +225,22 @@
       <div class="status-manager-dialog">
         <h3>状态管理</h3>
         
-        <div class="current-statuses">
+          <div class="current-statuses">
           <h4>当前状态列表</h4>
           <div class="status-list">
             <div 
-              v-for="(status, index) in allowedStatuses" 
+              v-for="(statusObj, index) in allowedStatuses" 
               :key="index"
               class="status-item"
             >
               <input 
-                v-model="allowedStatuses[index]"
+                v-model="allowedStatuses[index].label"
                 class="status-input"
                 placeholder="状态名称"
               />
+              <input type="color" v-model="allowedStatuses[index].color" title="选择颜色" style="width:48px; height:32px; padding:0; border:none;" />
               <div class="status-preview">
-                <span :class="`status-badge status-${status}`">{{ status }}</span>
+                <span :class="`status-badge status-${allowedStatuses[index].value || allowedStatuses[index].label}`" :style="{ background: allowedStatuses[index].color || '' , color: allowedStatuses[index].color ? '#fff' : '' }">{{ allowedStatuses[index].label || allowedStatuses[index].value }}</span>
               </div>
               <button 
                 class="btn btn-danger btn-sm"
@@ -337,6 +343,7 @@ export default {
   data() {
     return {
       allTasks: [],
+      taskThumbnails: {},
       projectInfo: null,
       loading: true,
       selectedStatus: 'all',
@@ -365,7 +372,9 @@ export default {
     availableStatuses() {
       // 合并允许的状态和任务中实际使用的状态
       const taskStatuses = [...new Set(this.allTasks.map(task => task.status || 'pending'))]
-      const combined = [...new Set([...this.allowedStatuses, ...taskStatuses])]
+      // allowedStatuses may be objects; extract values
+      const allowedValues = (this.allowedStatuses || []).map(s => (typeof s === 'string' ? s : (s.value || s.label))).filter(Boolean)
+      const combined = [...new Set([...allowedValues, ...taskStatuses])]
       return combined.sort()
     }
   },
@@ -464,6 +473,12 @@ export default {
         console.debug('[debug] loadProject response status:', projectResponse.data && projectResponse.data.status)
         this.projectInfo = projectResponse.data
         this.allTasks = projectResponse.data.tasks || []
+        // 为每个任务异步准备缩略图（优先 defaultFile，否则选择最早上传的图片）
+        for (const t of this.allTasks) {
+          this.prepareTaskThumbnail(t).catch((e) => {
+            console.debug('prepareTaskThumbnail error', t.name, e && e.message)
+          })
+        }
         // 仅在路由查询未指定时才重置为默认 'all'
         if (!this.$route || !this.$route.query || !this.$route.query.status) {
           this.selectedStatus = 'all'
@@ -476,10 +491,16 @@ export default {
         }
         
         // 从项目信息中读取allowedStatuses
-        if (projectResponse.data.allowedStatuses && Array.isArray(projectResponse.data.allowedStatuses)) {
-          this.allowedStatuses = projectResponse.data.allowedStatuses
-          this.originalStatuses = [...this.allowedStatuses]
-        }
+            if (projectResponse.data.allowedStatuses && Array.isArray(projectResponse.data.allowedStatuses)) {
+              // normalize allowedStatuses to objects { value, label, color }
+              this.allowedStatuses = (projectResponse.data.allowedStatuses || []).map(s => {
+                if (!s) return null
+                if (typeof s === 'string') return { value: s, label: s, color: '' }
+                // object case
+                return { value: s.value || s.label || '', label: s.label || s.value || '', color: s.color || s.color || '' }
+              }).filter(Boolean)
+              this.originalStatuses = JSON.parse(JSON.stringify(this.allowedStatuses))
+            }
         
         // 从项目信息中读取allowedTags
         if (projectResponse.data.allowedTags && Array.isArray(projectResponse.data.allowedTags)) {
@@ -492,6 +513,31 @@ export default {
         this.$router.push('/')
       } finally {
         this.loading = false
+      }
+    },
+
+    async prepareTaskThumbnail(task) {
+      try {
+        // 优先使用 README frontmatter 中的 defaultFile 或顶层的 defaultFile
+        const defaultFile = (task.frontmatter && task.frontmatter.defaultFile) || task.defaultFile
+        if (defaultFile) {
+          this.taskThumbnails[task.name] = `/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(defaultFile)}`
+          return
+        }
+
+        // 否则请求任务文件列表，选择最早的图片文件
+        const resp = await axios.get(`/api/tasks/${this.projectName}/${task.name}/files`)
+        const files = resp.data || []
+        if (!files || files.length === 0) return
+
+        // 过滤图片类文件（psd/ai/image等），并按 modified 升序排序
+        const candidates = files.filter(f => ['image','psd','ai','svg'].includes(f.type) || /\.(jpg|jpeg|png|gif|bmp|webp|psd|ai|svg|tiff|tif)$/i.test(f.name))
+        if (candidates.length === 0) return
+        candidates.sort((a,b) => new Date(a.modified) - new Date(b.modified))
+        const pick = candidates[0]
+        this.taskThumbnails[task.name] = `/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(pick.name)}`
+      } catch (err) {
+        console.debug('prepareTaskThumbnail failed for', task.name, err && err.message)
       }
     },
     
@@ -528,6 +574,44 @@ export default {
         this.tagFileCount = 0
       }
     },
+
+    getTaskThumbnailUrl(task) {
+      // 优先使用已缓存的缩略图 URL
+      if (this.taskThumbnails && this.taskThumbnails[task.name]) return this.taskThumbnails[task.name]
+
+      // 回退到 frontmatter.defaultFile（同步构造 URL）
+      const df = (task.frontmatter && task.frontmatter.defaultFile) || task.defaultFile
+      if (df) {
+        return `/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(df)}`
+      }
+
+      return ''
+    },
+
+    // 返回状态对应的颜色（如果在 allowedStatuses 中配置了 color）
+    getStatusColor(status) {
+      if (!status) return ''
+      const found = (this.allowedStatuses || []).find(s => {
+        if (!s) return false
+        const val = (typeof s === 'string') ? s : (s.value || s.label)
+        return val === status
+      })
+      if (!found) return ''
+      return typeof found === 'string' ? '' : (found.color || '')
+    },
+
+    getStatusStyle(status) {
+      const c = this.getStatusColor(status)
+      if (c) return { background: c, color: '#fff' }
+      return null
+    },
+
+    handleThumbError(event, task) {
+      console.error('Failed to load task thumbnail for:', task.name, task.defaultFile)
+      event.target.onerror = null
+      // 简单SVG占位符（灰色）
+      event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCI+5p2O5ZCIPC90ZXh0Pjwvc3ZnPg=='
+    },
     
     async downloadByTag(tag) {
       this.downloading = true
@@ -560,7 +644,7 @@ export default {
     },
     
     addNewStatus() {
-      this.allowedStatuses.push('new-status')
+      this.allowedStatuses.push({ value: 'new-status', label: 'new-status', color: '' })
     },
     
     removeStatus(index) {
@@ -575,30 +659,27 @@ export default {
     },
     
     async saveStatuses() {
-      // 过滤空状态
-      this.allowedStatuses = this.allowedStatuses.filter(s => s && s.trim())
-      
-      // 确保至少有一个状态
+      // 过滤空状态并确保至少有一个
+      this.allowedStatuses = (this.allowedStatuses || []).map(s => ({ value: (s.value || s.label || '').trim(), label: (s.label || s.value || '').trim(), color: s.color || '' })).filter(s => s.label)
       if (this.allowedStatuses.length === 0) {
-        this.allowedStatuses = ['pending']
+        this.allowedStatuses = [{ value: 'pending', label: 'pending', color: '' }]
       }
-      
+
       try {
-        // 保存到服务器（更新README.md）
+        // 保存到服务器（更新README.md）；后端会把这整个结构写入 frontmatter.allowedStatuses
         await axios.put(`/api/projects/${this.projectName}/allowed-statuses`, {
           allowedStatuses: this.allowedStatuses
         })
-        
-        this.originalStatuses = [...this.allowedStatuses]
+
+        this.originalStatuses = JSON.parse(JSON.stringify(this.allowedStatuses))
         this.showStatusManager = false
-        
-        // 可选：显示成功提示
+
         alert('状态配置已保存')
       } catch (error) {
         console.error('保存状态配置失败:', error)
         alert('保存失败：' + (error.response?.data?.error || error.message))
         // 恢复原状态
-        this.allowedStatuses = [...this.originalStatuses]
+        this.allowedStatuses = JSON.parse(JSON.stringify(this.originalStatuses))
       }
     },
     
@@ -724,6 +805,23 @@ export default {
   transform: translateY(-2px);
 }
 
+.task-thumbnail {
+  height: 160px;
+  overflow: hidden;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1rem 0;
+  border-radius: 6px;
+}
+
+.task-thumbnail img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
 .task-header {
   display: flex;
   justify-content: space-between;
@@ -735,6 +833,23 @@ export default {
   color: #2c3e50;
   font-size: 1.1rem;
   margin: 0;
+}
+.task-header .inline-file-count {
+  font-size: 0.9rem;
+  color: #666;
+  margin-left: 0.6rem;
+  font-weight: 600;
+}
+
+/* 状态徽章基础样式（允许通过 inline style 覆盖背景色） */
+.status-badge {
+  display: inline-block;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #fff;
+  background: #6c757d;
 }
 
 .task-stats {

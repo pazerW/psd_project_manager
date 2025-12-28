@@ -168,30 +168,9 @@ async function mergeChunks(dataPath, uploadInfo) {
 
   // 获取文件扩展名
   const fileExt = path.extname(fileName);
-
-  // 统计当前任务目录下已有的文件数量
-  const existingFiles = await fs.readdir(targetDir);
-  const designFileExtensions = [
-    ".psd",
-    ".ai",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".bmp",
-    ".webp",
-    ".svg",
-    ".tiff",
-    ".tif",
-  ];
-  const existingDesignFiles = existingFiles.filter((file) => {
-    const ext = path.extname(file).toLowerCase();
-    return designFileExtensions.includes(ext);
-  });
-
-  // 生成新文件名：Project名称_Task名称_序号.扩展名
-  const fileNumber = existingDesignFiles.length + 1;
-  const newFileName = `${projectName}_${taskName}_${fileNumber}${fileExt}`;
+  // 使用任务级持久自增 ID 生成文件序号，保证编号只增不减
+  const fileId = await getNextFileId(targetDir);
+  const newFileName = `${projectName}_${taskName}_${fileId}${fileExt}`;
   const targetPath = path.join(targetDir, newFileName);
 
   console.log(`文件将被重命名为: ${newFileName} (原文件名: ${fileName})`);
@@ -225,9 +204,27 @@ async function mergeChunks(dataPath, uploadInfo) {
       writeStream.on("error", reject);
     });
 
-    // 文件合并完成后，异步预生成缩略图（不阻塞响应）
+    // 文件合并完成后，分配递增编号并异步预生成缩略图（不阻塞响应）
     const finalFileName = uploadInfo.renamedFileName || fileName;
     const tags = uploadInfo.tags || "";
+
+    try {
+      const taskPath = path.join(dataPath, projectName, taskName);
+      const idToSave =
+        typeof fileId !== "undefined" ? fileId : await getNextFileId(taskPath);
+
+      // 将编号保存到 README frontmatter 中（使用已生成的 fileId）
+      await saveFileIdToReadme(
+        dataPath,
+        projectName,
+        taskName,
+        finalFileName,
+        idToSave
+      );
+    } catch (err) {
+      console.error("分配文件编号或保存到 README 失败:", err.message);
+    }
+
     setImmediate(() => {
       pregen缩略图(dataPath, projectName, taskName, finalFileName).catch(
         (err) => {
@@ -249,6 +246,111 @@ async function mergeChunks(dataPath, uploadInfo) {
     });
   } catch (error) {
     writeStream.destroy();
+    throw error;
+  }
+}
+
+// 获取任务级递增文件编号并持久化到 .meta.json
+async function getNextFileId(taskPath) {
+  // 持久化到 taskPath/README.md 的 frontmatter.lastId 字段
+  const readmePath = path.join(taskPath, "README.md");
+  try {
+    await fs.ensureDir(taskPath);
+    const matter = require("gray-matter");
+
+    let content = "";
+    let front = {};
+
+    if (await fs.pathExists(readmePath)) {
+      const fileContent = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(fileContent);
+      content = parsed.content || "";
+      front = parsed.data || {};
+    }
+
+    // 兼容已有项目：计算已存在的最大编号
+    let maxExisting = 9; // 目标：首次分配为 10
+
+    // 来自 front.fileIds 的编号
+    if (front.fileIds && typeof front.fileIds === "object") {
+      for (const v of Object.values(front.fileIds)) {
+        const n = parseInt(v, 10);
+        if (!isNaN(n) && n > maxExisting) maxExisting = n;
+      }
+    }
+
+    // 来自目录中文件名的编号（匹配尾部 _<number>）
+    try {
+      const files = await fs.readdir(taskPath);
+      for (const f of files) {
+        // 跳过 README.md
+        if (f === "README.md") continue;
+        const m = f.match(/_(\d+)(?:\.[^.]+)?$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && n > maxExisting) maxExisting = n;
+        }
+      }
+    } catch (e) {
+      // 忽略读取目录错误
+    }
+
+    // 确保 front.lastId 至少为 maxExisting（这样不会回退）
+    if (typeof front.lastId !== "number" || front.lastId < maxExisting) {
+      front.lastId = maxExisting;
+    }
+
+    // 递增并持久化，返回新值（首次返回为 maxExisting+1，默认首次为 10）
+    front.lastId = (front.lastId || 0) + 1;
+
+    const newContent = matter.stringify(content, front);
+    await fs.writeFile(readmePath, newContent, "utf8");
+
+    return front.lastId;
+  } catch (err) {
+    console.error("getNextFileId 错误:", err.message);
+    throw err;
+  }
+}
+
+// 将文件编号写入 README.md 的 frontmatter（字段名为 fileIds）
+async function saveFileIdToReadme(
+  dataPath,
+  projectName,
+  taskName,
+  fileName,
+  id
+) {
+  const taskPath = path.join(dataPath, projectName, taskName);
+  const readmePath = path.join(taskPath, "README.md");
+
+  try {
+    const matter = require("gray-matter");
+    let content = "";
+    let frontmatter = {};
+
+    if (await fs.pathExists(readmePath)) {
+      const fileContent = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(fileContent);
+      content = parsed.content;
+      frontmatter = parsed.data || {};
+    }
+
+    if (!frontmatter.fileIds) frontmatter.fileIds = {};
+
+    frontmatter.fileIds[fileName] = id;
+
+    // 如果没有默认文件字段，则将第一个上传的文件设为默认
+    if (!frontmatter.defaultFile) {
+      frontmatter.defaultFile = fileName;
+    }
+
+    const newContent = matter.stringify(content, frontmatter);
+    await fs.writeFile(readmePath, newContent, "utf8");
+
+    console.log(`已为文件 ${fileName} 分配编号: ${id}`);
+  } catch (error) {
+    console.error("保存文件编号失败:", error.message);
     throw error;
   }
 }

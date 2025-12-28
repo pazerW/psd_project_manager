@@ -127,7 +127,15 @@
               :key="file.name"
               class="psd-item"
             >
-            <div class="psd-thumbnail">
+              <div class="default-badge">
+                <template v-if="(taskInfo.frontmatter && taskInfo.frontmatter.defaultFile) ? taskInfo.frontmatter.defaultFile === file.name : (taskInfo.defaultFile === file.name)">
+                  <span class="default-label">默认</span>
+                </template>
+                <template v-else>
+                  <button class="btn-set-default" @click.stop="setDefaultFile(file.name)">设置为默认</button>
+                </template>
+              </div>
+              <div class="psd-thumbnail">
                   <img 
                     :src="file.thumbnailUrl" 
                 :alt="file.name"
@@ -257,6 +265,14 @@
                 :key="file.name"
                 class="psd-item"
               >
+                      <div class="default-badge">
+                        <template v-if="(taskInfo.frontmatter && taskInfo.frontmatter.defaultFile) ? taskInfo.frontmatter.defaultFile === file.name : (taskInfo.defaultFile === file.name)">
+                          <span class="default-label">默认</span>
+                        </template>
+                        <template v-else>
+                          <button class="btn-set-default" @click.stop="setDefaultFile(file.name)">设置为默认</button>
+                        </template>
+                      </div>
                   <div class="psd-thumbnail">
                   <img 
                     :src="file.thumbnailUrl" 
@@ -710,7 +726,9 @@ export default {
     async loadProjectStatuses() {
       try {
         const response = await axios.get(`/api/tasks/${this.projectName}/statuses/list`)
-        this.projectStatuses = response.data
+        const arr = response.data || []
+        // normalize to array of strings (support objects with value/label/color)
+        this.projectStatuses = arr.map(s => (typeof s === 'string' ? s : (s.value || s.label || ''))).filter(Boolean)
       } catch (error) {
         console.error('Failed to load project statuses:', error)
         this.projectStatuses = []
@@ -1026,6 +1044,24 @@ export default {
       } catch (error) {
         console.error('保存标签失败:', error)
         alert('保存标签失败：' + (error.response?.data?.error || error.message))
+      }
+    },
+
+    // 将某个文件设置为任务的默认文件
+    async setDefaultFile(fileName) {
+      try {
+        const resp = await axios.post(`/api/tasks/${this.projectName}/${this.taskName}/default-file`, { fileName })
+        if (resp.data && resp.data.success) {
+          this.taskInfo.frontmatter = this.taskInfo.frontmatter || {}
+          this.taskInfo.frontmatter.defaultFile = fileName
+          // 广播变更事件，其他页面/组件可监听并更新
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('dataChanged', { detail: { path: `${this.projectName}/${this.taskName}/README.md`, frontmatter: this.taskInfo.frontmatter, lastUpdated: Date.now() } }))
+          }
+        }
+      } catch (err) {
+        console.error('设置默认文件失败', err)
+        alert('设置默认文件失败：' + (err.response?.data?.error || err.message))
       }
     },
 
@@ -1485,6 +1521,7 @@ export default {
   border-radius: 8px;
   overflow: hidden;
   transition: box-shadow 0.2s;
+  position: relative;
 }
 
 .psd-item:hover {
@@ -1525,6 +1562,35 @@ export default {
   background: linear-gradient(135deg,#31a8ff 0%,#0078d4 100%);
   box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
+
+/* 默认文件按钮/标签（右上角） */
+.default-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.default-label {
+  background: #28a745;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.btn-set-default {
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border: none;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+.btn-set-default:hover { background: rgba(0,0,0,0.75); }
 
 /* 红色徽章用于 PSD / AI */
 .badge-red {

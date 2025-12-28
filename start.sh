@@ -162,9 +162,9 @@ build_project() {
     install_deps
     
     log_info "构建前端..."
-    cd frontend
-    npm run build
-    cd ..
+    # 使用绝对路径并通过 --prefix 在 frontend 目录执行构建（支持路径中有空格）
+    cd "/Volumes/Pazer Work HD/vscode/psd_project_manager" || true
+    npm --prefix frontend run build
     
     log_success "项目构建完成"
 }
