@@ -16,13 +16,6 @@ RUN apk add --no-cache \
 # 设置工作目录
 WORKDIR /app
 
-# Build-time args for frontend Vite env injection
-ARG VITE_EXTERNAL_DOWNLOAD_BASE
-ARG VITE_INTERNAL_ORIGINS
-
-ENV VITE_EXTERNAL_DOWNLOAD_BASE=${VITE_EXTERNAL_DOWNLOAD_BASE}
-ENV VITE_INTERNAL_ORIGINS=${VITE_INTERNAL_ORIGINS}
-
 # 复制项目文件
 COPY package*.json ./
 COPY backend/package*.json ./backend/

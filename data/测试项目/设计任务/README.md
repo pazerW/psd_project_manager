@@ -15,7 +15,8 @@ fileIds:
   测试项目_设计任务_1.psd: 1
   测试项目_设计任务_10.psd: 10
   测试项目_设计任务_11.psd: 11
-lastId: 11
+  测试项目_设计任务_12.png: 12
+lastId: 12
 defaultFile: test-image.jpg
 ---
 

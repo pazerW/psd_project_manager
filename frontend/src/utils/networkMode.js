@@ -15,6 +15,36 @@ const state = reactive({
   externalBase,
 });
 
+// Normalize a chosen internal origin (prefer entry without port, fallback to first)
+function getNormalizedInternalOrigin() {
+  if (!internalOrigins || internalOrigins.length === 0) return null;
+  // Prefer entry that includes a port (internal must have port per requirement)
+  let candidate =
+    internalOrigins.find((s) => {
+      try {
+        return !!new URL(s).port;
+      } catch (e) {
+        return s.indexOf(":") !== -1; // string contains ':' considered as host:port
+      }
+    }) || internalOrigins[0];
+
+  try {
+    let u = new URL(candidate);
+    return u.origin;
+  } catch (e) {
+    // add protocol if missing
+    const withProto = candidate.startsWith("http")
+      ? candidate
+      : `http://${candidate}`;
+    try {
+      const u = new URL(withProto);
+      return u.origin;
+    } catch (err) {
+      return null;
+    }
+  }
+}
+
 function setMode(m) {
   state.mode = m;
   try {
@@ -30,72 +60,32 @@ function isInternal() {
 
 function getDownloadUrl(relativeOrAbsolute) {
   if (!relativeOrAbsolute) return relativeOrAbsolute;
-
-  // Try to parse input as URL (may be absolute or relative)
-  let u;
+  // Normalize absolute URLs to relative path (strip origin). Then always prefix based on mode.
+  let relativePath = relativeOrAbsolute;
   try {
-    u = new URL(relativeOrAbsolute, window.location.href);
+    const u = new URL(relativeOrAbsolute, window.location.href);
+    relativePath = (u.pathname || "") + (u.search || "") + (u.hash || "");
   } catch (e) {
-    // treat as plain relative path string
-    if (isInternal()) return relativeOrAbsolute;
-    if (state.externalBase) {
-      const base = state.externalBase.replace(/\/$/, "");
-      return relativeOrAbsolute.startsWith("/")
-        ? base + relativeOrAbsolute
-        : base + "/" + relativeOrAbsolute;
-    }
-    return relativeOrAbsolute;
+    // keep original string as relativePath
   }
 
-  // If internal mode, return original input
-  if (isInternal()) return relativeOrAbsolute;
-
-  // External mode: if no external base configured, return original
-  if (!state.externalBase) return relativeOrAbsolute;
-
-  // Determine if the parsed URL is an internal origin we should map
-  function isPrivateIp(hostname) {
-    // IPv4 private ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-    const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (!ipMatch) return false;
-    const a = parseInt(ipMatch[1], 10);
-    const b = parseInt(ipMatch[2], 10);
-    if (a === 10) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    return false;
+  const internalOrigin = getNormalizedInternalOrigin();
+  if (isInternal()) {
+    if (internalOrigin)
+      return relativePath.startsWith("/")
+        ? internalOrigin + relativePath
+        : internalOrigin + "/" + relativePath;
+    return relativePath;
   }
 
-  function isInternalOrigin(origin) {
-    try {
-      const o = new URL(origin);
-      const host = o.hostname;
-      if (internalOrigins.includes(o.origin) || internalOrigins.includes(host))
-        return true;
-      if (host === "localhost") return true;
-      if (isPrivateIp(host)) return true;
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // If URL already points to a non-internal origin, return as-is
-  try {
-    if (!isInternalOrigin(u.origin)) return relativeOrAbsolute;
-  } catch (e) {
-    // fallthrough
-  }
-
-  // Build external URL by replacing origin with external base origin (preserve path/query/hash)
-  try {
-    const eb = new URL(state.externalBase, window.location.href);
-    return eb.origin + u.pathname + u.search + u.hash;
-  } catch (err) {
-    // externalBase might be a path-only string; fallback to simple prefix
+  if (state.externalBase) {
     const base = state.externalBase.replace(/\/$/, "");
-    return base + (u.pathname + u.search + u.hash);
+    return relativePath.startsWith("/")
+      ? base + relativePath
+      : base + "/" + relativePath;
   }
+
+  return relativePath;
 }
 
 export default {
