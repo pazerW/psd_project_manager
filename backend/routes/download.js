@@ -166,10 +166,23 @@ router.get("/download-by-tag/:projectName/:tag", async (req, res) => {
       zlib: { level: 9 }, // 最高压缩级别
     });
 
-    // 处理错误
+    // 处理错误：如果 header 已发送，避免尝试写 JSON（会导致协议错误），改为销毁响应
     archive.on("error", (err) => {
       console.error("压缩文件错误:", err);
-      res.status(500).json({ error: err.message });
+      try {
+        archive.abort && archive.abort();
+      } catch (e) {
+        // ignore
+      }
+      if (!res.headersSent) {
+        try {
+          res.status(500).json({ error: err.message });
+        } catch (e) {
+          try { res.destroy(err); } catch (ee) {}
+        }
+      } else {
+        try { res.destroy(err); } catch (e) {}
+      }
     });
 
     // 将压缩包输出到响应流
@@ -183,7 +196,12 @@ router.get("/download-by-tag/:projectName/:tag", async (req, res) => {
     }
 
     // 完成压缩
-    await archive.finalize();
+    try {
+      await archive.finalize();
+    } catch (err) {
+      console.error('archive finalize error:', err);
+      // 已在 archive.on('error') 中处理
+    }
 
     console.log(
       `已创建标签 "${tag}" 的压缩包，包含 ${matchedFiles.length} 个文件`

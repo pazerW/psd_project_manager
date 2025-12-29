@@ -698,7 +698,20 @@ export default {
     // 使用 fetch+Blob 强制下载，解析 Content-Disposition 获取文件名
     async downloadFile(file) {
       const url = this.getDownloadUrl(file.downloadUrl)
+      // 如果是内网/同源，使用隐藏 iframe 发起请求以让浏览器原生处理 Content-Disposition 下载（避免 fetch 引起的 HTTP2 问题）
       try {
+        const parsed = new URL(url, window.location.href)
+        const isSameOrigin = parsed.origin === window.location.origin
+        if (mode === 'internal' || isSameOrigin) {
+          const iframe = document.createElement('iframe')
+          iframe.style.display = 'none'
+          iframe.src = url
+          document.body.appendChild(iframe)
+          // 保留一段时间后移除
+          setTimeout(() => { try { iframe.remove() } catch (e) {} }, 60 * 1000)
+          return
+        }
+
         const resp = await fetch(url, { credentials: 'include' })
         if (!resp.ok) {
           throw new Error(`Download request failed: ${resp.status}`)
