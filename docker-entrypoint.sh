@@ -43,6 +43,26 @@ fi
 echo "Setting permissions on data directories..."
 chown -R ${PUID}:${PGID} /app/data /app/logs /app/uploads 2>/dev/null || true
 
+# 运行时替换前端环境变量
+if [ -d "/app/backend/public" ]; then
+    echo "Injecting runtime environment variables into frontend..."
+    
+    # 获取环境变量值，如果未设置则使用空字符串
+    EXTERNAL_BASE="${VITE_EXTERNAL_DOWNLOAD_BASE:-}"
+    INTERNAL_ORIGINS="${VITE_INTERNAL_ORIGINS:-}"
+    
+    echo "VITE_EXTERNAL_DOWNLOAD_BASE: $EXTERNAL_BASE"
+    echo "VITE_INTERNAL_ORIGINS: $INTERNAL_ORIGINS"
+    
+    # 在所有 .js 文件中替换占位符
+    find /app/backend/public/assets -type f -name "*.js" -exec sed -i \
+        -e "s|__VITE_EXTERNAL_DOWNLOAD_BASE__|${EXTERNAL_BASE}|g" \
+        -e "s|__VITE_INTERNAL_ORIGINS__|${INTERNAL_ORIGINS}|g" \
+        {} \;
+    
+    echo "Environment variables injected successfully"
+fi
+
 echo "Starting application as $USER_NAME (UID: $PUID, GID: $PGID)..."
 
 # 以指定用户运行命令

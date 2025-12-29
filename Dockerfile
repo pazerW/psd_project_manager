@@ -29,8 +29,12 @@ RUN npm install && \
 # 复制源代码
 COPY . .
 
-# 构建前端
-RUN cd frontend && npm run build
+# 构建前端（使用占位符，运行时替换）
+# 注意：这些占位符会在容器启动时被 docker-entrypoint.sh 替换
+RUN cd frontend && \
+    VITE_EXTERNAL_DOWNLOAD_BASE='__VITE_EXTERNAL_DOWNLOAD_BASE__' \
+    VITE_INTERNAL_ORIGINS='__VITE_INTERNAL_ORIGINS__' \
+    npm run build
 
 # 创建数据目录
 RUN mkdir -p /app/data /app/logs /app/uploads
