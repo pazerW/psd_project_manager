@@ -235,7 +235,7 @@
               </div>
               
               <div class="psd-actions">
-                <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download>
+                <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download target="_blank" rel="noopener noreferrer">
                   下载
                 </a>
                 <button 
@@ -370,7 +370,7 @@
                     </div>
 
                     <div class="psd-actions">
-                      <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download>
+                      <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download target="_blank" rel="noopener noreferrer">
                         下载
                       </a>
                       <button 
