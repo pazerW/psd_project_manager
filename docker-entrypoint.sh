@@ -44,7 +44,7 @@ echo "Setting permissions on data directories..."
 chown -R ${PUID}:${PGID} /app/data /app/logs /app/uploads 2>/dev/null || true
 
 # 运行时替换前端环境变量
-if [ -d "/app/backend/public" ]; then
+if [ -d "/app/frontend/dist" ]; then
     echo "Injecting runtime environment variables into frontend..."
     
     # 获取环境变量值，如果未设置则使用空字符串
@@ -56,7 +56,7 @@ if [ -d "/app/backend/public" ]; then
     
     # 在所有 .js 文件中替换占位符（Vite会将变量名转为小写）
     # 同时支持大小写两种格式以确保完全替换
-    find /app/backend/public/assets -type f -name "*.js" -exec sed -i \
+    find /app/frontend/dist/assets -type f -name "*.js" -exec sed -i \
         -e "s|__vite_external_download_base__|${EXTERNAL_BASE}|g" \
         -e "s|__VITE_EXTERNAL_DOWNLOAD_BASE__|${EXTERNAL_BASE}|g" \
         -e "s|__vite_internal_origins__|${INTERNAL_ORIGINS}|g" \
