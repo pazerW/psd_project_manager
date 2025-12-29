@@ -627,28 +627,40 @@ export default {
     async downloadByTag(tag) {
       this.downloading = true
       try {
-        const response = await axios.get(
-          networkMode.getDownloadUrl(`/api/download/download-by-tag/${this.projectName}/${tag}`),
-          { responseType: 'blob' }
-        )
-        
-        // 创建下载链接
-        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const url = networkMode.getDownloadUrl(`/api/download/download-by-tag/${this.projectName}/${tag}`)
+        const resp = await fetch(url, { credentials: 'include' })
+        if (!resp.ok) {
+          throw new Error(`Download request failed: ${resp.status}`)
+        }
+        const blob = await resp.blob()
+
+        // 解析 Content-Disposition 获取文件名（支持 filename* RFC5987）
+        const cd = resp.headers.get('Content-Disposition') || ''
+        const mStar = /filename\*=[^']*'[^']*'([^;\n\r]+)/i.exec(cd)
+        let filename = `${this.projectName}_${tag}_${Date.now()}.zip`
+        if (mStar && mStar[1]) {
+          try { filename = decodeURIComponent(mStar[1]) } catch (e) { filename = mStar[1] }
+        } else {
+          const m = /filename\s*=\s*"?([^";]+)"?/i.exec(cd)
+          if (m && m[1]) filename = m[1]
+        }
+
+        const objectUrl = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
-        link.href = url
-        link.setAttribute('download', `${this.projectName}_${tag}_${Date.now()}.zip`)
+        link.href = objectUrl
+        link.setAttribute('download', filename)
         document.body.appendChild(link)
         link.click()
         link.remove()
-        window.URL.revokeObjectURL(url)
-        
+        window.URL.revokeObjectURL(objectUrl)
+
         // 下载成功后关闭对话框
         setTimeout(() => {
           this.showDownloadDialog = false
         }, 500)
       } catch (error) {
         console.error('下载失败:', error)
-        alert('下载失败：' + (error.response?.data?.error || error.message))
+        alert('下载失败：' + (error.message || error))
       } finally {
         this.downloading = false
       }

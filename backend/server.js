@@ -18,6 +18,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 允许前端读取下载响应中的 Content-Disposition 等标题
+app.use((req, res, next) => {
+  const existing = res.getHeader('Access-Control-Expose-Headers') || '';
+  const expose = String(existing);
+  const headersToExpose = ['Content-Disposition', 'Content-Length'];
+  const merged = headersToExpose.reduce((acc, h) => {
+    if (!acc.includes(h)) return acc ? `${acc}, ${h}` : h;
+    return acc;
+  }, expose);
+  if (merged) res.setHeader('Access-Control-Expose-Headers', merged);
+  next();
+});
+
 // 数据目录路径（将从Docker挂载或本地配置）
 const DATA_PATH = process.env.DATA_PATH || path.join(__dirname, "../data");
 

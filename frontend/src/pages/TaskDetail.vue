@@ -235,7 +235,7 @@
               </div>
               
               <div class="psd-actions">
-                <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download target="_blank" rel="noopener noreferrer">
+                <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" @click.prevent="downloadFile(file)">
                   下载
                 </a>
                 <button 
@@ -370,7 +370,7 @@
                     </div>
 
                     <div class="psd-actions">
-                      <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download target="_blank" rel="noopener noreferrer">
+                      <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" @click.prevent="downloadFile(file)">
                         下载
                       </a>
                       <button 
@@ -693,6 +693,40 @@ export default {
     // 返回根据当前网络模式调整后的下载链接
     getDownloadUrl(rel) {
       return networkMode.getDownloadUrl(rel)
+    },
+
+    // 使用 fetch+Blob 强制下载，解析 Content-Disposition 获取文件名
+    async downloadFile(file) {
+      const url = this.getDownloadUrl(file.downloadUrl)
+      try {
+        const resp = await fetch(url, { credentials: 'include' })
+        if (!resp.ok) {
+          window.open(url, '_blank')
+          return
+        }
+        const blob = await resp.blob()
+        const cd = resp.headers.get('Content-Disposition') || ''
+        let filename = file.name || 'download'
+        const mStar = /filename\*=[^']*'[^']*'([^;\n\r]+)/i.exec(cd)
+        if (mStar && mStar[1]) {
+          try { filename = decodeURIComponent(mStar[1]) } catch (e) { filename = mStar[1] }
+        } else {
+          const m = /filename\s*=\s*"?([^";]+)"?/i.exec(cd)
+          if (m && m[1]) filename = m[1]
+        }
+
+        const objectUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = objectUrl
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000)
+      } catch (err) {
+        console.error('Download failed, opening in new tab', err)
+        window.open(url, '_blank')
+      }
     },
     
     async loadTaskDetail() {

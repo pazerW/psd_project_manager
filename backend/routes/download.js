@@ -145,13 +145,14 @@ router.get("/download-by-tag/:projectName/:tag", async (req, res) => {
       return res.status(404).json({ error: "No files found with this tag" });
     }
 
-    // 设置响应头
+    // 设置响应头，使用 RFC5987 filename* 并提供 ASCII 回退
     const zipFileName = `${projectName}_${tag}_${Date.now()}.zip`;
     res.setHeader("Content-Type", "application/zip");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${encodeURIComponent(zipFileName)}"`
-    );
+    const safeName = zipFileName.replace(/"/g, '\\"');
+    const disposition = `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(
+      zipFileName
+    )}`;
+    res.setHeader("Content-Disposition", disposition);
 
     // 创建压缩包
     const archive = archiver("zip", {

@@ -80,9 +80,16 @@ router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
 
     const stats = await fs.stat(filePath);
 
+    // 为非 ASCII 名称兼容浏览器，使用 filename*（RFC5987）并提供 ASCII 回退
+    const hasNonAscii = /[^\x00-\x7F]/.test(fileName);
+    const fallbackName = hasNonAscii ? 'file' + path.extname(fileName) : fileName.replace(/"/g, '\\"');
+    const disposition = `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(
+      fileName
+    )}`;
+
     res.set({
       "Content-Type": "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
+      "Content-Disposition": disposition,
       "Content-Length": stats.size,
     });
 
