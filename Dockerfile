@@ -31,9 +31,10 @@ COPY . .
 
 # 构建前端（使用占位符，运行时替换）
 # 注意：这些占位符会在容器启动时被 docker-entrypoint.sh 替换
+# Vite 会将变量名转换为小写，所以使用小写占位符
 RUN cd frontend && \
-    VITE_EXTERNAL_DOWNLOAD_BASE='__VITE_EXTERNAL_DOWNLOAD_BASE__' \
-    VITE_INTERNAL_ORIGINS='__VITE_INTERNAL_ORIGINS__' \
+    VITE_EXTERNAL_DOWNLOAD_BASE='__vite_external_download_base__' \
+    VITE_INTERNAL_ORIGINS='__vite_internal_origins__' \
     npm run build
 
 # 创建数据目录
