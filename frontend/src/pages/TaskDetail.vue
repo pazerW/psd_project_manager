@@ -725,10 +725,21 @@ export default {
     
     async loadProjectStatuses() {
       try {
+        // 优先尝试从项目 README 中读取 allowedStatuses（保持与 ProjectDetail 行为一致）
+        const projResp = await axios.get(`/api/projects/${this.projectName}`)
+        const projData = projResp.data || {}
+        if (projData.allowedStatuses && Array.isArray(projData.allowedStatuses) && projData.allowedStatuses.length > 0) {
+          // 支持字符串或对象，统一为 label
+          this.projectStatuses = projData.allowedStatuses.map(s => (typeof s === 'string' ? s : (s.label || s.value || ''))).filter(Boolean)
+          return
+        }
+
+        // 回退到原有的 statuses 列表接口，但要去重并只保留非空字符串
         const response = await axios.get(`/api/tasks/${this.projectName}/statuses/list`)
         const arr = response.data || []
-        // normalize to array of strings (support objects with value/label/color)
-        this.projectStatuses = arr.map(s => (typeof s === 'string' ? s : (s.value || s.label || ''))).filter(Boolean)
+        const mapped = arr.map(s => (typeof s === 'string' ? s : (s.label || s.value || ''))).filter(Boolean)
+        // 保持原顺序去重
+        this.projectStatuses = [...new Set(mapped)]
       } catch (error) {
         console.error('Failed to load project statuses:', error)
         this.projectStatuses = []

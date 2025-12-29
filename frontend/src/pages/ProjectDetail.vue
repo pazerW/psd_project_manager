@@ -231,17 +231,17 @@
             <div 
               v-for="(statusObj, index) in allowedStatuses" 
               :key="index"
-              class="status-item"
-            >
-              <input 
-                v-model="allowedStatuses[index].label"
-                class="status-input"
-                placeholder="状态名称"
-              />
-              <input type="color" v-model="allowedStatuses[index].color" title="选择颜色" style="width:48px; height:32px; padding:0; border:none;" />
-              <div class="status-preview">
-                <span :class="`status-badge status-${allowedStatuses[index].value || allowedStatuses[index].label}`" :style="{ background: allowedStatuses[index].color || '' , color: allowedStatuses[index].color ? '#fff' : '' }">{{ allowedStatuses[index].label || allowedStatuses[index].value }}</span>
-              </div>
+              <div class="status-item"
+              >
+                <input 
+                  v-model="allowedStatuses[index].label"
+                  class="status-input"
+                  placeholder="状态名称"
+                />
+                <input type="color" v-model="allowedStatuses[index].color" title="选择颜色" style="width:48px; height:32px; padding:0; border:none;" />
+                <div class="status-preview">
+                  <span :class="`status-badge status-${allowedStatuses[index].label}`" :style="{ background: allowedStatuses[index].color || '' , color: allowedStatuses[index].color ? '#fff' : '' }">{{ allowedStatuses[index].label }}</span>
+                </div>
               <button 
                 class="btn btn-danger btn-sm"
                 @click="removeStatus(index)"
@@ -351,7 +351,12 @@ export default {
       showDownloadDialog: false,
       showStatusManager: false,
       showTagManager: false,
-      allowedStatuses: ['pending', 'active', 'completed', 'paused'],
+      allowedStatuses: [
+        { label: 'pending', color: '' },
+        { label: 'active', color: '' },
+        { label: 'completed', color: '' },
+        { label: 'paused', color: '' }
+      ],
       originalStatuses: [],
       allowedTags: ['初稿', '定稿', '客户审核', '最终版'],
       originalTags: [],
@@ -370,12 +375,16 @@ export default {
       return this.allTasks.filter(task => task.status === this.selectedStatus)
     },
     availableStatuses() {
-      // 合并允许的状态和任务中实际使用的状态
+      // 优先使用项目配置的 allowedStatuses（保持顺序）。
+      // 仅在未配置 allowedStatuses 时，回退到任务中实际存在的状态。
       const taskStatuses = [...new Set(this.allTasks.map(task => task.status || 'pending'))]
-      // allowedStatuses may be objects; extract values
-      const allowedValues = (this.allowedStatuses || []).map(s => (typeof s === 'string' ? s : (s.value || s.label))).filter(Boolean)
-      const combined = [...new Set([...allowedValues, ...taskStatuses])]
-      return combined.sort()
+      const allowedValues = (this.allowedStatuses || []).map(s => (typeof s === 'string' ? s : (s.label || ''))).filter(Boolean)
+      if (allowedValues.length > 0) {
+        // 保持用户配置的顺序并去重
+        return [...new Set(allowedValues)]
+      }
+      // fallback: 使用任务中实际存在的状态（按字母顺序）
+      return taskStatuses.sort()
     }
   },
   async mounted() {
@@ -492,12 +501,13 @@ export default {
         
         // 从项目信息中读取allowedStatuses
             if (projectResponse.data.allowedStatuses && Array.isArray(projectResponse.data.allowedStatuses)) {
-              // normalize allowedStatuses to objects { value, label, color }
+              // normalize allowedStatuses to objects { label, color }
+              // 支持老数据中可能存在的 value 字段，优先使用 label，其次使用 value
               this.allowedStatuses = (projectResponse.data.allowedStatuses || []).map(s => {
                 if (!s) return null
-                if (typeof s === 'string') return { value: s, label: s, color: '' }
-                // object case
-                return { value: s.value || s.label || '', label: s.label || s.value || '', color: s.color || s.color || '' }
+                if (typeof s === 'string') return { label: s, color: '' }
+                // object case: prefer label, fallback to value
+                return { label: (s.label || s.value || '').toString(), color: s.color || '' }
               }).filter(Boolean)
               this.originalStatuses = JSON.parse(JSON.stringify(this.allowedStatuses))
             }
@@ -593,7 +603,7 @@ export default {
       if (!status) return ''
       const found = (this.allowedStatuses || []).find(s => {
         if (!s) return false
-        const val = (typeof s === 'string') ? s : (s.value || s.label)
+        const val = (typeof s === 'string') ? s : (s.label || '')
         return val === status
       })
       if (!found) return ''
@@ -644,7 +654,7 @@ export default {
     },
     
     addNewStatus() {
-      this.allowedStatuses.push({ value: 'new-status', label: 'new-status', color: '' })
+      this.allowedStatuses.push({ label: 'new-status', color: '' })
     },
     
     removeStatus(index) {
@@ -660,9 +670,13 @@ export default {
     
     async saveStatuses() {
       // 过滤空状态并确保至少有一个
-      this.allowedStatuses = (this.allowedStatuses || []).map(s => ({ value: (s.value || s.label || '').trim(), label: (s.label || s.value || '').trim(), color: s.color || '' })).filter(s => s.label)
+      this.allowedStatuses = (this.allowedStatuses || []).map(s => {
+        if (!s) return null
+        const label = (typeof s === 'string') ? s.trim() : ((s.label || s.value || '') + '').trim()
+        return { label, color: s.color || '' }
+      }).filter(s => s && s.label)
       if (this.allowedStatuses.length === 0) {
-        this.allowedStatuses = [{ value: 'pending', label: 'pending', color: '' }]
+        this.allowedStatuses = [{ label: 'pending', color: '' }]
       }
 
       try {

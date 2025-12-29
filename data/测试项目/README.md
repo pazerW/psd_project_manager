@@ -3,26 +3,21 @@ title: 测试项目
 created: '2025/12/20 18:24'
 status: active
 allowedStatuses:
-  - value: pending
-    label: pending
+  - label: '1'
     color: ''
-  - value: in-progress
-    label: in-progress
+  - label: '2'
     color: ''
-  - value: review
-    label: review
-    color: '#bc157f'
-  - value: completed
-    label: completed
+  - label: '3'
     color: ''
-  - value: cancelled
-    label: cancelled
+  - label: '4'
     color: ''
 allowedTags:
   - 初稿
-  - 定稿
   - 客户审核
   - 最终版
+  - 新标签1
+  - 新标签2
+  - 新标签3
 ---
 
 # 测试项目
