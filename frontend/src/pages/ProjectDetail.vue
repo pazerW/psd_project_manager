@@ -336,6 +336,7 @@
 
 <script>
 import axios from 'axios'
+import networkMode from '../utils/networkMode'
 
 export default {
   name: 'ProjectDetail',
@@ -531,7 +532,7 @@ export default {
         // 优先使用 README frontmatter 中的 defaultFile 或顶层的 defaultFile
         const defaultFile = (task.frontmatter && task.frontmatter.defaultFile) || task.defaultFile
         if (defaultFile) {
-          this.taskThumbnails[task.name] = `/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(defaultFile)}`
+          this.taskThumbnails[task.name] = networkMode.getDownloadUrl(`/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(defaultFile)}`)
           return
         }
 
@@ -545,7 +546,7 @@ export default {
         if (candidates.length === 0) return
         candidates.sort((a,b) => new Date(a.modified) - new Date(b.modified))
         const pick = candidates[0]
-        this.taskThumbnails[task.name] = `/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(pick.name)}`
+        this.taskThumbnails[task.name] = networkMode.getDownloadUrl(`/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(pick.name)}`)
       } catch (err) {
         console.debug('prepareTaskThumbnail failed for', task.name, err && err.message)
       }
@@ -564,7 +565,7 @@ export default {
     async loadAvailableTags() {
       this.loadingTags = true
       try {
-        const response = await axios.get(`/api/download/tags/${this.projectName}`)
+        const response = await axios.get(networkMode.getDownloadUrl(`/api/download/tags/${this.projectName}`))
         this.availableTags = response.data
       } catch (error) {
         console.error('加载标签失败:', error)
@@ -577,7 +578,7 @@ export default {
     async selectTag(tag) {
       this.selectedTag = tag
       try {
-        const response = await axios.get(`/api/download/files-by-tag/${this.projectName}/${tag}`)
+        const response = await axios.get(networkMode.getDownloadUrl(`/api/download/files-by-tag/${this.projectName}/${tag}`))
         this.tagFileCount = response.data.length
       } catch (error) {
         console.error('获取标签文件数失败:', error)
@@ -592,7 +593,7 @@ export default {
       // 回退到 frontmatter.defaultFile（同步构造 URL）
       const df = (task.frontmatter && task.frontmatter.defaultFile) || task.defaultFile
       if (df) {
-        return `/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(df)}`
+        return networkMode.getDownloadUrl(`/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(df)}`)
       }
 
       return ''
@@ -627,7 +628,7 @@ export default {
       this.downloading = true
       try {
         const response = await axios.get(
-          `/api/download/download-by-tag/${this.projectName}/${tag}`,
+          networkMode.getDownloadUrl(`/api/download/download-by-tag/${this.projectName}/${tag}`),
           { responseType: 'blob' }
         )
         

@@ -42,7 +42,7 @@
           @touchmove.prevent="onPanMove"
           @touchend="onPanEnd"
         >
-          <img v-if="psdFiles && psdFiles[lightboxIndex]" :src="psdFiles[lightboxIndex].thumbnailUrl" :alt="psdFiles[lightboxIndex].name"
+          <img v-if="psdFiles && psdFiles[lightboxIndex]" :src="getDownloadUrl(psdFiles[lightboxIndex].thumbnailUrl)" :alt="psdFiles[lightboxIndex].name"
             :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${zoomScale})`, transformOrigin: originX !== null ? `${originX}px ${originY}px` : '50% 50%' }"/>
         </div>
         <button class="lightbox-next" @click="nextImage">›</button>
@@ -137,7 +137,7 @@
               </div>
               <div class="psd-thumbnail">
                   <img 
-                    :src="file.thumbnailUrl" 
+                    :src="getDownloadUrl(file.thumbnailUrl)" 
                 :alt="file.name"
                 @error="handleImageError($event, file.name)"
                 @load="handleImageLoad($event, file.name)"
@@ -235,7 +235,7 @@
               </div>
               
               <div class="psd-actions">
-                <a :href="file.downloadUrl" class="btn btn-secondary btn-sm" download>
+                <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download>
                   下载
                 </a>
                 <button 
@@ -275,7 +275,7 @@
                       </div>
                   <div class="psd-thumbnail">
                   <img 
-                    :src="file.thumbnailUrl" 
+                    :src="getDownloadUrl(file.thumbnailUrl)" 
                     :alt="file.name"
                     @error="handleImageError($event, file.name)"
                     @load="handleImageLoad($event, file.name)"
@@ -370,7 +370,7 @@
                     </div>
 
                     <div class="psd-actions">
-                      <a :href="file.downloadUrl" class="btn btn-secondary btn-sm" download>
+                      <a :href="getDownloadUrl(file.downloadUrl)" class="btn btn-secondary btn-sm" download>
                         下载
                       </a>
                       <button 
@@ -482,6 +482,7 @@ import axios from 'axios'
 import { renderMarkdown } from '../utils/markdown'
 import { formatDistance } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import networkMode from '../utils/networkMode'
 
 export default {
   name: 'TaskDetail',
@@ -688,6 +689,10 @@ export default {
         return true
       }
       return this.projectTags.includes(tag)
+    },
+    // 返回根据当前网络模式调整后的下载链接
+    getDownloadUrl(rel) {
+      return networkMode.getDownloadUrl(rel)
     },
     
     async loadTaskDetail() {

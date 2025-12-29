@@ -22,6 +22,12 @@
             {{ $route.params.taskName }}
           </span>
         </nav>
+        <div class="network-toggle">
+          <select v-model="mode" @change="onModeChange" class="mode-select">
+            <option value="internal">内网</option>
+            <option value="external">外网</option>
+          </select>
+        </div>
       </div>
     </header>
     
@@ -32,8 +38,20 @@
 </template>
 
 <script>
+import networkMode from './utils/networkMode'
 export default {
   name: 'App'
+  ,
+  data() {
+    return {
+      mode: networkMode.state.mode
+    }
+  },
+  methods: {
+    onModeChange() {
+      networkMode.setMode(this.mode)
+    }
+  }
 }
 </script>
 
@@ -87,6 +105,17 @@ export default {
 .breadcrumb-separator {
   margin: 0 0.5rem;
   color: #ccc;
+}
+
+.network-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.mode-select {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
 }
 
 .main-content {
