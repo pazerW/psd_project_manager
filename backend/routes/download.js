@@ -146,10 +146,17 @@ router.get("/download-by-tag/:projectName/:tag", async (req, res) => {
     }
 
     // 设置响应头，使用 RFC5987 filename* 并提供 ASCII 回退
-    const zipFileName = `${projectName}_${tag}_${Date.now()}.zip`;
+    let zipFileName = `${projectName}_${tag}_${Date.now()}.zip`;
+    // 移除可能的控制字符，防止 header 注入/非法字符
+    zipFileName = zipFileName.replace(/[\r\n\t]/g, "_");
     res.setHeader("Content-Type", "application/zip");
-    const safeName = zipFileName.replace(/"/g, '\\"');
-    const disposition = `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(
+
+    // 如果包含非 ASCII 字符，使用简单 ASCII 回退名
+    const hasNonAscii = /[^\x00-\x7F]/.test(zipFileName);
+    const fallbackName = hasNonAscii
+      ? `download_${Date.now()}.zip`
+      : zipFileName.replace(/"/g, '\\"');
+    const disposition = `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(
       zipFileName
     )}`;
     res.setHeader("Content-Disposition", disposition);

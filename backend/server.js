@@ -13,21 +13,27 @@ const downloadRoutes = require("./routes/download");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 中间件：允许带凭证的跨域请求，前端 fetch 时使用 credentials: 'include'
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 // 中间件
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 允许前端读取下载响应中的 Content-Disposition 等标题
 app.use((req, res, next) => {
-  const existing = res.getHeader('Access-Control-Expose-Headers') || '';
+  const existing = res.getHeader("Access-Control-Expose-Headers") || "";
   const expose = String(existing);
-  const headersToExpose = ['Content-Disposition', 'Content-Length'];
+  const headersToExpose = ["Content-Disposition", "Content-Length"];
   const merged = headersToExpose.reduce((acc, h) => {
     if (!acc.includes(h)) return acc ? `${acc}, ${h}` : h;
     return acc;
   }, expose);
-  if (merged) res.setHeader('Access-Control-Expose-Headers', merged);
+  if (merged) res.setHeader("Access-Control-Expose-Headers", merged);
   next();
 });
 

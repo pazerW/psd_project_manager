@@ -701,8 +701,7 @@ export default {
       try {
         const resp = await fetch(url, { credentials: 'include' })
         if (!resp.ok) {
-          window.open(url, '_blank')
-          return
+          throw new Error(`Download request failed: ${resp.status}`)
         }
         const blob = await resp.blob()
         const cd = resp.headers.get('Content-Disposition') || ''
@@ -724,8 +723,8 @@ export default {
         a.remove()
         setTimeout(() => URL.revokeObjectURL(objectUrl), 5000)
       } catch (err) {
-        console.error('Download failed, opening in new tab', err)
-        window.open(url, '_blank')
+        console.error('Download failed:', err)
+        alert('下载失败：' + (err.message || err))
       }
     },
     
