@@ -3,14 +3,11 @@ import { reactive } from "vue";
 const STORAGE_KEY = "networkMode";
 const DEFAULT = "internal"; // 'internal' or 'external'
 
-const externalBase =
-  import.meta.env.VITE_EXTERNAL_DOWNLOAD_BASE ||
-  window.__EXTERNAL_DOWNLOAD_BASE__ ||
-  "";
+const externalBase = import.meta.env.VITE_EXTERNAL_DOWNLOAD_BASE || "";
 
-const internalOrigins = (import.meta.env.VITE_INTERNAL_ORIGINS || window.__INTERNAL_ORIGINS__ || "")
-  .split(',')
-  .map(s => s.trim())
+const internalOrigins = (import.meta.env.VITE_INTERNAL_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
   .filter(Boolean);
 
 const state = reactive({
@@ -43,7 +40,9 @@ function getDownloadUrl(relativeOrAbsolute) {
     if (isInternal()) return relativeOrAbsolute;
     if (state.externalBase) {
       const base = state.externalBase.replace(/\/$/, "");
-      return relativeOrAbsolute.startsWith("/") ? base + relativeOrAbsolute : base + "/" + relativeOrAbsolute;
+      return relativeOrAbsolute.startsWith("/")
+        ? base + relativeOrAbsolute
+        : base + "/" + relativeOrAbsolute;
     }
     return relativeOrAbsolute;
   }
@@ -71,8 +70,9 @@ function getDownloadUrl(relativeOrAbsolute) {
     try {
       const o = new URL(origin);
       const host = o.hostname;
-      if (internalOrigins.includes(o.origin) || internalOrigins.includes(host)) return true;
-      if (host === 'localhost') return true;
+      if (internalOrigins.includes(o.origin) || internalOrigins.includes(host))
+        return true;
+      if (host === "localhost") return true;
       if (isPrivateIp(host)) return true;
       return false;
     } catch (e) {
