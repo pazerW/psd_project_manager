@@ -938,15 +938,15 @@ export default {
           formData.append('tags', this.uploadTags.trim())
         }
         
-        await axios.post(
-          `/api/upload/chunk/${this.projectName}/${this.taskName}`,
-          formData,
-          {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            }
-          }
+        const uploadEndpoint = networkMode.getDownloadUrl(
+          `/api/upload/chunk/${this.projectName}/${this.taskName}`
         )
+
+        await axios.post(uploadEndpoint, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        })
         
         this.uploadProgress = ((chunkIndex + 1) / totalChunks) * 100
       }
@@ -955,7 +955,10 @@ export default {
     async cancelUpload() {
       if (this.uploadId) {
         try {
-          await axios.delete(`/api/upload/cancel/${this.uploadId}`)
+          const cancelEndpoint = networkMode.getDownloadUrl(
+            `/api/upload/cancel/${this.uploadId}`
+          )
+          await axios.delete(cancelEndpoint)
         } catch (error) {
           console.error('Failed to cancel upload:', error)
         }
@@ -984,13 +987,16 @@ export default {
       const fileName = this.deleteTargetFile
       this.deleteConfirmVisible = false
       this.deleteTargetFile = ''
-      try {
-        await axios.delete(`/api/files/${this.projectName}/${this.taskName}/${fileName}`)
-        await this.loadTaskDetail() // 重新加载文件列表
-      } catch (error) {
-        console.error('Failed to delete file:', error)
-        alert('删除文件失败：' + (error.response?.data?.error || error.message))
-      }
+        try {
+          const deleteEndpoint = networkMode.getDownloadUrl(
+            `/api/files/${this.projectName}/${this.taskName}/${fileName}`
+          )
+          await axios.delete(deleteEndpoint)
+          await this.loadTaskDetail() // 重新加载文件列表
+        } catch (error) {
+          console.error('Failed to delete file:', error)
+          alert('删除文件失败：' + (error.response?.data?.error || error.message))
+        }
     },
 
     cancelDelete() {
