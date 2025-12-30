@@ -702,7 +702,9 @@ export default {
       try {
         const parsed = new URL(url, window.location.href)
         const isSameOrigin = parsed.origin === window.location.origin
-        if (mode === 'internal' || isSameOrigin) {
+        // 使用 networkMode 中的当前模式而不是裸露的全局变量
+        const currentMode = (networkMode && networkMode.state && networkMode.state.mode) ? networkMode.state.mode : 'internal'
+        if (currentMode === 'internal' || isSameOrigin) {
           const iframe = document.createElement('iframe')
           iframe.style.display = 'none'
           iframe.src = url

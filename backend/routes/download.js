@@ -178,10 +178,14 @@ router.get("/download-by-tag/:projectName/:tag", async (req, res) => {
         try {
           res.status(500).json({ error: err.message });
         } catch (e) {
-          try { res.destroy(err); } catch (ee) {}
+          try {
+            res.destroy(err);
+          } catch (ee) {}
         }
       } else {
-        try { res.destroy(err); } catch (e) {}
+        try {
+          res.destroy(err);
+        } catch (e) {}
       }
     });
 
@@ -199,7 +203,7 @@ router.get("/download-by-tag/:projectName/:tag", async (req, res) => {
     try {
       await archive.finalize();
     } catch (err) {
-      console.error('archive finalize error:', err);
+      console.error("archive finalize error:", err);
       // 已在 archive.on('error') 中处理
     }
 
