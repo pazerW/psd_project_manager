@@ -3,16 +3,15 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# 只复制前端相关文件
-COPY frontend/package*.json ./
-RUN npm install && npm cache clean --force
-
+# 复制前端所有文件
 COPY frontend/ ./
 
-# 构建前端
-RUN VITE_EXTERNAL_DOWNLOAD_BASE='__vite_external_download_base__' \
+# 安装依赖并构建
+RUN npm install && \
+    VITE_EXTERNAL_DOWNLOAD_BASE='__vite_external_download_base__' \
     VITE_INTERNAL_ORIGINS='__vite_internal_origins__' \
-    npm run build
+    npm run build && \
+    npm cache clean --force
 
 # ====== 阶段2: 最终运行镜像 ======
 FROM node:18-alpine
