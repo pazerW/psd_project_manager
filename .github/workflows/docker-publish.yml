@@ -42,3 +42,10 @@ jobs:
           IMAGE_NAME="registry.cn-beijing.aliyuncs.com/pazerwong/design_project_management"
           TAG="latest"
           docker push "${IMAGE_NAME}:${TAG}"
+
+    runs-on: self-hosted
+    steps: # 操作的步骤
+      - name: Inspect Runner File System
+        run: |
+          echo "--- 当前工作目录 (pwd) ---"
+          bash /runner/psd_project_manager/redeploy.sh
