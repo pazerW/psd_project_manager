@@ -43,3 +43,8 @@ jobs:
           TAG="latest"
           docker push "${IMAGE_NAME}:${TAG}"
           
+      - name: Trigger QNAP Deploy
+        run: |
+          # 假设您已将该脚本放在 Runner 可以访问的路径
+          # 且设置了环境变量 ALI_USERNAME 和 ALI_PASSWORD
+          bash /share/homes/Pazer/config/psd_project_manager/redeploy.sh
