@@ -1,6 +1,11 @@
 # 使用官方Node.js镜像作为基础镜像
 FROM node:18-alpine
 
+# 构建参数
+ARG BUILD_VERSION=unknown
+ARG BUILD_DATE=unknown
+ARG GIT_COMMIT=unknown
+
 # 安装ImageMagick和其他系统依赖（用于PSD/AI文件缩略图生成）
 RUN apk add --no-cache \
     imagemagick \
@@ -48,6 +53,10 @@ ENV DATA_PATH=/app/data
 ENV NODE_ENV=production
 ENV PUID=1000
 ENV PGID=1000
+ENV VERSION=${BUILD_VERSION}
+ENV BUILD_DATE=${BUILD_DATE}
+ENV GIT_COMMIT=${GIT_COMMIT}
+ENV IMAGE_NAME=registry.cn-beijing.aliyuncs.com/pazerwong/design_project_management
 
 # 复制启动脚本
 COPY docker-entrypoint.sh /usr/local/bin/

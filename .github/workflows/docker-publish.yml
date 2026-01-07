@@ -33,9 +33,16 @@ jobs:
         id: build
         run: | 
           IMAGE_NAME="registry.cn-beijing.aliyuncs.com/pazerwong/design_project_management"
-          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          BUILD_VERSION=$(date +'%Y-%m-%d %H:%M:%S')
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          GIT_COMMIT=$(git rev-parse --short HEAD)
           TAG="latest"
-          docker build -t "${IMAGE_NAME}:${TAG}" -f Dockerfile . 
+          docker build \
+            --build-arg BUILD_VERSION="${BUILD_VERSION}" \
+            --build-arg BUILD_DATE="${BUILD_DATE}" \
+            --build-arg GIT_COMMIT="${GIT_COMMIT}" \
+            -t "${IMAGE_NAME}:${TAG}" \
+            -f Dockerfile . 
 
       - name: Push Docker image # 代码Push 
         run: |

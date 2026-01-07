@@ -100,19 +100,9 @@ if (fs.existsSync(FRONTEND_DIST)) {
 app.listen(PORT, () => {
   console.log(`PSD Project Manager Backend running on port ${PORT}`);
   console.log(`Data directory: ${DATA_PATH}`);
-  
-  // Docker 镜像信息
-  const imageInfo = {
-    version: process.env.IMAGE_VERSION || process.env.VERSION || 'unknown',
-    buildDate: process.env.BUILD_DATE || 'unknown',
-    gitCommit: process.env.GIT_COMMIT || 'unknown',
-    imageName: process.env.IMAGE_NAME || 'unknown'
-  };
-  console.log(`Docker Image: ${imageInfo.imageName}`);
-  console.log(`Version: ${imageInfo.version}`);
-  console.log(`Build Date: ${imageInfo.buildDate}`);
-  console.log(`Git Commit: ${imageInfo.gitCommit}`);
-  
+
+  console.log(`Version: ${process.env.VERSION}`);
+
   const frontendEnabled = fs.existsSync(
     path.join(__dirname, "../frontend/dist")
   );
