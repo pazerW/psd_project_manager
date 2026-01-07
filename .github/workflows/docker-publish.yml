@@ -42,8 +42,7 @@ jobs:
           IMAGE_NAME="registry.cn-beijing.aliyuncs.com/pazerwong/design_project_management"
           TAG="latest"
           docker push "${IMAGE_NAME}:${TAG}"
-          
-          
+
       - name: Trigger QNAP Deploy
         run: |
           # 假设您已将该脚本放在 Runner 可以访问的路径
