@@ -22,6 +22,9 @@
       </div>
 
       <div class="task-actions">
+        <button class="btn btn-secondary" @click="showComment = true">
+          添加留言
+        </button>
         <button class="btn btn-primary" @click="showUpload = true">
           上传文件
         </button>
@@ -474,6 +477,15 @@
         </div>
       </div>
     </div>
+
+    <!-- 留言对话框 -->
+    <CommentDialog
+      :visible="showComment"
+      :project-name="projectName"
+      :task-name="taskName"
+      @close="showComment = false"
+      @success="handleCommentSuccess"
+    />
   </div>
 </template>
 
@@ -483,9 +495,13 @@ import { renderMarkdown } from '../utils/markdown'
 import { formatDistance } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import networkMode from '../utils/networkMode'
+import CommentDialog from '../components/CommentDialog.vue'
 
 export default {
   name: 'TaskDetail',
+  components: {
+    CommentDialog
+  },
   props: ['projectName', 'taskName'],
   data() {
     return {
@@ -502,8 +518,6 @@ export default {
       editingDescriptionText: '', // 编辑中的描述文本
       editingTags: null, // 正在编辑标签的文件名
       editingTagsText: '', // 编辑中的标签文本
-      editingStatus: false, // 是否正在编辑状态（保留兼容）
-      editingStatusText: '', // 编辑中的状态文本（保留兼容）
       savingStatus: null, // 正在保存的状态值（用于防抖 / 禁用）
       projectStatuses: [], // 项目允许的状态列表
       projectTags: [], // 项目允许的标签列表
@@ -534,7 +548,10 @@ export default {
       ,
       // 删除确认
       deleteConfirmVisible: false,
-      deleteTargetFile: ''
+      deleteTargetFile: '',
+      
+      // 留言
+      showComment: false
     }
   },
   computed: {
@@ -811,36 +828,6 @@ export default {
       }
     },
     
-    startEditStatus() {
-      if (!this.canEditStatus) {
-        return
-      }
-      this.editingStatus = true
-      this.editingStatusText = this.taskInfo.frontmatter?.status || ''
-      // 等待DOM更新后聚焦选择框
-      this.$nextTick(() => {
-        if (this.$refs.statusSelect) {
-          this.$refs.statusSelect.focus()
-        }
-      })
-    },
-    
-    cancelEditStatus() {
-      this.editingStatus = false
-      this.editingStatusText = ''
-    },
-    
-    async saveStatus() {
-      // 保持向后兼容：若调用此方法（例如通过键盘提交），使用 editingStatusText
-      const status = (this.editingStatusText || '').trim()
-      if (!status) {
-        alert('请选择一个状态')
-        return
-      }
-      await this.changeStatus(status)
-      this.cancelEditStatus()
-    },
-
     async changeStatus(status) {
       if (!status || this.savingStatus) return
       this.savingStatus = status
@@ -1062,12 +1049,6 @@ export default {
       }
     },
 
-    // 标签验证
-    validateTags() {
-      // 移除非法字符（保留中文、英文、数字、空格、常用标点）
-      this.uploadTags = this.uploadTags.replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s，。、！？—]+/g, '')
-    },
-
     // 标签编辑相关方法
     startEditTags(fileName, currentTags) {
       if (this.projectTags.length === 0) {
@@ -1184,20 +1165,6 @@ export default {
         this.updateGroupSortOrders()
       } else {
         this.groupByTag = false
-      }
-    },
-
-    toggleGroupByTag() {
-      // `groupByTag` is updated by v-model on the checkbox; 只在开启时初始化分组排序信息
-      console.debug('[TaskDetail] toggleGroupByTag called, groupByTag=', this.groupByTag)
-      if (this.groupByTag) {
-        const tags = new Set()
-        ;(this.psdFiles || []).forEach(f => {
-          tags.add(f.tags || '未分类')
-        })
-        tags.forEach(t => {
-          if (!this.groupSortOrders[t]) this.groupSortOrders[t] = this.sortMode
-        })
       }
     },
 
@@ -1318,6 +1285,12 @@ export default {
       if (e.key === 'ArrowLeft') this.prevImage()
       if (e.key === '+') this.zoomIn()
       if (e.key === '-') this.zoomOut()
+    },
+
+    // 留言添加成功后的处理
+    async handleCommentSuccess() {
+      // 重新加载任务详情以显示新留言
+      await this.loadTaskDetail()
     }
   }
 }

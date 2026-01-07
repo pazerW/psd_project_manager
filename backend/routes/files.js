@@ -116,40 +116,55 @@ router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
     }
 
     // 记录调试信息（便于在 NAS 环境排查编码/路径问题）
-    console.log('[Download] params:', { projectName, taskName, fileName: req.params.fileName });
+    console.log("[Download] params:", {
+      projectName,
+      taskName,
+      fileName: req.params.fileName,
+    });
 
     // 防止路径遍历
-    if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
+    if (
+      fileName.includes("..") ||
+      fileName.includes("/") ||
+      fileName.includes("\\")
+    ) {
       return res.status(400).json({ error: "Invalid file name" });
     }
 
     const filePath = path.join(req.dataPath, projectName, taskName, fileName);
     const resolved = path.resolve(filePath);
-    console.log('[Download] resolvedPath:', resolved);
-    console.log('[Download] dataPath base:', path.resolve(req.dataPath));
+    console.log("[Download] resolvedPath:", resolved);
+    console.log("[Download] dataPath base:", path.resolve(req.dataPath));
     const base = path.resolve(req.dataPath) + path.sep;
     if (!resolved.startsWith(base)) {
       return res.status(403).json({ error: "Access denied" });
     }
 
     let exists = await fs.pathExists(resolved);
-    console.log('[Download] file exists:', exists);
+    console.log("[Download] file exists:", exists);
 
     // 如果直接路径不存在，尝试在目录中匹配 Unicode 正规化差异（NFC/NFD）或相似名称（NAS 与 macOS 常见问题）
     if (!exists) {
       try {
         const dir = path.dirname(resolved);
-        console.log('[Download] attempting fallback filename match in dir:', dir);
+        console.log(
+          "[Download] attempting fallback filename match in dir:",
+          dir
+        );
         const entries = await fs.readdir(dir);
         const requested = fileName;
-        const normalizedRequested = requested && requested.normalize ? requested.normalize('NFC') : requested;
+        const normalizedRequested =
+          requested && requested.normalize
+            ? requested.normalize("NFC")
+            : requested;
 
         let matched = entries.find((entry) => {
           if (entry === requested) return true;
           if (entry.normalize) {
-            const eNFC = entry.normalize('NFC');
-            const eNFD = entry.normalize('NFD');
-            if (eNFC === normalizedRequested || eNFD === normalizedRequested) return true;
+            const eNFC = entry.normalize("NFC");
+            const eNFD = entry.normalize("NFD");
+            if (eNFC === normalizedRequested || eNFD === normalizedRequested)
+              return true;
           }
           return false;
         });
@@ -157,13 +172,22 @@ router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
         if (matched) {
           const oldResolved = resolved;
           resolved = path.join(dir, matched);
-          console.log('[Download] fallback matched file:', matched, 'oldResolved=', oldResolved, 'newResolved=', resolved);
+          console.log(
+            "[Download] fallback matched file:",
+            matched,
+            "oldResolved=",
+            oldResolved,
+            "newResolved=",
+            resolved
+          );
           exists = await fs.pathExists(resolved);
         } else {
-          console.log('[Download] no fallback match found in directory entries');
+          console.log(
+            "[Download] no fallback match found in directory entries"
+          );
         }
       } catch (err) {
-        console.error('[Download] fallback readdir error:', err);
+        console.error("[Download] fallback readdir error:", err);
       }
     }
 
@@ -176,8 +200,12 @@ router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
     // 为非 ASCII 名称兼容浏览器，使用 filename*（RFC5987）
     // filename 参数只能使用 ASCII，对于中文文件名使用 encodeURIComponent 后的值或简化名称
     const hasNonAscii = /[^\x00-\x7F]/.test(fileName);
-    const fallbackName = hasNonAscii ? 'file' + path.extname(fileName) : fileName.replace(/\"/g, '\\"');
-    const disposition = `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+    const fallbackName = hasNonAscii
+      ? "file" + path.extname(fileName)
+      : fileName.replace(/\"/g, '\\"');
+    const disposition = `attachment; filename="${fallbackName}"; filename*=UTF-8''${encodeURIComponent(
+      fileName
+    )}`;
 
     res.set({
       "Content-Type": "application/octet-stream",
@@ -186,17 +214,17 @@ router.get("/download/:projectName/:taskName/:fileName", async (req, res) => {
     });
 
     const stream = fs.createReadStream(resolved);
-    stream.on('error', (err) => {
-      console.error('File stream error:', err);
+    stream.on("error", (err) => {
+      console.error("File stream error:", err);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to read file' });
+        res.status(500).json({ error: "Failed to read file" });
       } else {
         res.destroy();
       }
     });
     stream.pipe(res);
   } catch (error) {
-    console.error('Download error:', error);
+    console.error("Download error:", error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }

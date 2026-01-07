@@ -572,4 +572,47 @@ function getFileType(ext) {
   return "other";
 }
 
+// 添加留言到任务README
+router.post("/:projectName/:taskName/comment", async (req, res) => {
+  try {
+    const { projectName, taskName } = req.params;
+    const { title, content } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ error: "标题和内容不能为空" });
+    }
+
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const readmePath = path.join(taskPath, "README.md");
+
+    if (!(await fs.pathExists(readmePath))) {
+      return res.status(404).json({ error: "任务README文件不存在" });
+    }
+
+    // 读取现有内容
+    let existingContent = await fs.readFile(readmePath, "utf8");
+
+    // 构建留言内容：### {标题}\n\n{内容}\n\n
+    const commentSection = `\n\n### ${title}\n\n${content}\n`;
+
+    // 追加到文件末尾
+    const newContent = existingContent + commentSection;
+
+    // 写入文件
+    await fs.writeFile(readmePath, newContent, "utf8");
+
+    // 广播数据变更事件
+    if (req.app && req.app.locals && req.app.locals.broadcastDataChange) {
+      req.app.locals.broadcastDataChange(
+        `${projectName}/${taskName}/README.md`
+      );
+    }
+
+    res.json({ success: true, message: "留言添加成功" });
+  } catch (error) {
+    console.error("添加留言失败:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
