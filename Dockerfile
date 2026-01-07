@@ -75,9 +75,6 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 RUN mkdir -p /app/data /app/logs /app/uploads && \
     chown -R node:node /app
 
-# 切换到非root用户
-USER node
-
 # 暴露端口
 EXPOSE 3000
 
