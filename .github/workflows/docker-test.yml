@@ -11,3 +11,6 @@ jobs:
         run: |
           echo "开始重新部署..."
           bash /runner/psd_project_manager/redeploy.sh
+      
+      - name: Push to iPhone
+        run: curl -L "https://api.day.app/ogSVMSaU6XHBXx9dt9j4Sm/${{ github.repository }}/actions redeployed successfully! 🎉"
