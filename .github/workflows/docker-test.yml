@@ -1,0 +1,66 @@
+name: Quick Docker Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  quick-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Quick Docker and Container Check
+        uses: appleboy/ssh-action@master
+        with:
+          script: |
+            echo "=== 快速检查 ==="
+            
+            # 1. Docker 命令测试
+            echo "1. Docker 状态:"
+            docker ps >/dev/null 2>&1 && echo "✅ Docker 可用" || echo "❌ Docker 不可用"
+            
+            # 2. 查找容器
+            echo ""
+            echo "2. 查找容器:"
+            CONTAINER=$(docker ps -qf "name=psd-project-manager")
+            if [ -z "$CONTAINER" ]; then
+              echo "❌ 未找到 psd-project-manager 容器"
+              echo "所有容器:"
+              docker ps --format "{{.Names}}" | head -10
+              exit 1
+            fi
+            echo "✅ 容器ID: $CONTAINER"
+            
+            # 3. 容器内目录检查
+            echo ""
+            echo "3. 容器内目录检查:"
+            docker exec $CONTAINER bash -c '
+              echo "当前目录: $(pwd)"
+              echo ""
+              echo "检查 /config:"
+              ls -la /config/ 2>/dev/null || echo "无 /config 目录"
+              echo ""
+              echo "检查 /config/psd_project_manager:"
+              if [ -d "/config/psd_project_manager" ]; then
+                ls -la /config/psd_project_manager/
+              else
+                echo "目录不存在"
+              fi
+            '
+            
+            # 4. 关键文件检查
+            echo ""
+            echo "4. 关键文件检查:"
+            docker exec $CONTAINER bash -c '
+              echo "redeploy.sh:"
+              if [ -f "/config/psd_project_manager/redeploy.sh" ]; then
+                ls -la "/config/psd_project_manager/redeploy.sh"
+              else
+                echo "文件不存在"
+              fi
+              echo ""
+              echo "docker-compose.yml:"
+              if [ -f "/config/psd_project_manager/docker-compose.yml" ]; then
+                ls -la "/config/psd_project_manager/docker-compose.yml"
+              else
+                echo "文件不存在"
+              fi
+            '
