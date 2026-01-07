@@ -9,5 +9,5 @@ jobs:
           ALIYUN_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
           ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
         run: |
-          echo "--- 当前工作目录 (pwd) ---"
+          echo "开始重新部署..."
           bash /runner/psd_project_manager/redeploy.sh
