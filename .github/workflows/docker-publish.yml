@@ -44,7 +44,7 @@ jobs:
             -t "${IMAGE_NAME}:latest" \
             -t "${IMAGE_NAME}:${TIMESTAMP_TAG}" \
             -f Dockerfile . 
-          echo "timestamp_tag_=${TIMESTAMP_TAG}" >> $GITHUB_OUTPUT
+          echo "timestamp_tag=${TIMESTAMP_TAG}" >> $GITHUB_OUTPUT
 
       - name: Push Docker image # 代码Push 
         run: |
