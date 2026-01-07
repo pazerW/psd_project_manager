@@ -7,6 +7,9 @@ jobs:
   quick-check:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
       - name: Quick Docker and Container Check
         uses: appleboy/ssh-action@master
         with:
@@ -62,5 +65,18 @@ jobs:
                 ls -la "/config/psd_project_manager/docker-compose.yml"
               else
                 echo "文件不存在"
+              fi
+            '
+            
+            # 5. 尝试直接执行脚本
+            echo ""
+            echo "5. 尝试执行脚本:"
+            docker exec $CONTAINER bash -c '
+              if [ -f "/config/psd_project_manager/redeploy.sh" ]; then
+                echo "执行脚本..."
+                cd /config/psd_project_manager
+                bash redeploy.sh
+              else
+                echo "脚本不存在，无法执行"
               fi
             '
