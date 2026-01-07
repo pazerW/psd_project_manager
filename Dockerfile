@@ -5,7 +5,7 @@ WORKDIR /app/frontend
 
 # 只复制前端相关文件
 COPY frontend/package*.json ./
-RUN npm ci && npm cache clean --force
+RUN npm install && npm cache clean --force
 
 COPY frontend/ ./
 
