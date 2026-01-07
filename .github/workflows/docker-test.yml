@@ -4,7 +4,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test SSH
-        uses: appleboy/ssh-action@v0.1.5
-        with:
-          script: echo "Hello from NAS"
+      - name: Inspect Runner File System
+        run: |
+          echo "--- 当前工作目录 (pwd) ---"
+          pwd
+          
+          echo "--- 根目录列表 (ls -F /) ---"
+          ls -F /
+          
+          echo "--- 尝试查看 /config 目录 (如果已挂载) ---"
+          ls -R /config || echo "/config 目录不存在"
+          
+          echo "--- 尝试查看 QNAP 原始路径 ---"
+          ls -R /share/homes/Pazer/config || echo "QNAP 原始路径在容器内不可见"
