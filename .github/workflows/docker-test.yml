@@ -2,7 +2,7 @@ name: Simple Test
 on: workflow_dispatch
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Inspect Runner File System
         run: |
