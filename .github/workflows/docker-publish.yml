@@ -44,6 +44,7 @@ jobs:
             -t "${IMAGE_NAME}:latest" \
             -t "${IMAGE_NAME}:${TIMESTAMP_TAG}" \
             -f Dockerfile . 
+          echo "timestamp_tag_=${TIMESTAMP_TAG}" >> $GITHUB_OUTPUT
 
       - name: Push Docker image # 代码Push 
         run: |
@@ -53,7 +54,12 @@ jobs:
 
       - name: Upload logs on failure
         if: ${{ failure() }}
-        run: curl -L "https://api.day.app/ogSVMSaU6XHBXx9dt9j4Sm/ ❌${{ github.repository }}/actions redeployed failure ❌"
+        run: |
+          # Encode the message to handle emojis and special characters
+          MESSAGE="❌${{ github.repository }} actions redeployed failure ❌"
+          ENCODED_MESSAGE=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$MESSAGE'))")
+          
+          curl -L "https://api.day.app/ogSVMSaU6XHBXx9dt9j4Sm/$ENCODED_MESSAGE"
 
   redeploy:
     needs: build-and-push
