@@ -43,6 +43,7 @@ jobs:
           TAG="latest"
           docker push "${IMAGE_NAME}:${TAG}"
 
+  redeploy:
     runs-on: self-hosted
     steps: # 操作的步骤
       - name: Inspect Runner File System
