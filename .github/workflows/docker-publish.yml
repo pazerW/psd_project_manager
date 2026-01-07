@@ -48,9 +48,12 @@ jobs:
       - name: Push Docker image # 代码Push 
         run: |
           IMAGE_NAME="registry.cn-beijing.aliyuncs.com/pazerwong/design_project_management"
-          TIMESTAMP_TAG=$(date +'%Y%m%d%H%M')
           docker push "${IMAGE_NAME}:latest"
-          docker push "${IMAGE_NAME}:${TIMESTAMP_TAG}"
+          docker push "${IMAGE_NAME}:${{ steps.build.outputs.timestamp_tag }}"
+
+      - name: Upload logs on failure
+        if: ${{ failure() }}
+        run: curl -L "https://api.day.app/ogSVMSaU6XHBXx9dt9j4Sm/ ❌${{ github.repository }}/actions redeployed failure ❌"
 
   redeploy:
     needs: build-and-push
@@ -63,3 +66,6 @@ jobs:
         run: |
           echo "--- 当前工作目录 (pwd) ---"
           bash /runner/psd_project_manager/redeploy.sh
+
+      - name: Push to iPhone
+        run: curl -L "https://api.day.app/ogSVMSaU6XHBXx9dt9j4Sm/🎉${{ github.repository }}/actions redeployed successfully! "
