@@ -43,13 +43,3 @@ jobs:
           TAG="latest"
           docker push "${IMAGE_NAME}:${TAG}"
 
-      - name: Trigger QNAP Deploy
-
-        script: |
-          echo "=== 调试信息 ==="
-          echo "当前用户: $(whoami)"
-          echo "当前目录: $(pwd)"
-          echo "=== 查找项目 ==="
-          find / -type f -name "docker-compose.yml" 2>/dev/null | head -10
-          echo "=== 容器状态 ==="
-          docker ps | grep psd
