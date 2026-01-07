@@ -44,6 +44,7 @@ jobs:
           docker push "${IMAGE_NAME}:${TAG}"
 
   redeploy:
+    needs: build-and-push
     runs-on: self-hosted
     steps: # 操作的步骤
       - name: Inspect Runner File System
