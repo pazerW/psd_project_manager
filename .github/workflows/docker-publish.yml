@@ -48,6 +48,9 @@ jobs:
     runs-on: self-hosted
     steps: # 操作的步骤
       - name: Inspect Runner File System
+        env:
+          ALIYUN_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
+          ALIYUN_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
         run: |
           echo "--- 当前工作目录 (pwd) ---"
           bash /runner/psd_project_manager/redeploy.sh
