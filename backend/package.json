@@ -8,16 +8,19 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "multer": "^2.0.0-rc.4",
-    "sharp": "^0.33.0",
-    "gray-matter": "^4.0.3",
-    "fs-extra": "^11.1.1",
-    "mime-types": "^2.1.35",
-    "path": "^0.12.7",
     "archiver": "^7.0.1",
-    "chokidar": "^3.5.3"
+    "axios": "^1.13.2",
+    "chokidar": "^3.5.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "form-data": "^4.0.5",
+    "fs-extra": "^11.1.1",
+    "gray-matter": "^4.0.3",
+    "http-proxy-middleware": "^3.0.5",
+    "mime-types": "^2.1.35",
+    "multer": "^2.0.2",
+    "path": "^0.12.7",
+    "sharp": "^0.33.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

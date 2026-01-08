@@ -10,6 +10,7 @@ import "highlight.js/styles/github.css";
 import ProjectList from "./pages/ProjectList.vue";
 import ProjectDetail from "./pages/ProjectDetail.vue";
 import TaskDetail from "./pages/TaskDetail.vue";
+import AIWorkbench from "./pages/AIWorkbench.vue";
 
 // 配置路由
 const routes = [
@@ -18,6 +19,11 @@ const routes = [
   {
     path: "/project/:projectName/task/:taskName",
     component: TaskDetail,
+    props: true,
+  },
+  {
+    path: "/project/:projectName/task/:taskName/ai-workbench",
+    component: AIWorkbench,
     props: true,
   },
 ];

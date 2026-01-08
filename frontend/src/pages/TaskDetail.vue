@@ -28,6 +28,9 @@
         <button class="btn btn-primary" @click="showUpload = true">
           上传文件
         </button>
+        <button class="btn btn-success" @click="goToAIWorkbench">
+          AI工作台
+        </button>
       </div>
     </div>
     <!-- Lightbox 弹窗 -->
@@ -700,6 +703,12 @@ export default {
     }
   },
   methods: {
+    // 进入AI工作台
+    goToAIWorkbench() {
+      this.$router.push({
+        path: `/project/${this.projectName}/task/${this.taskName}/ai-workbench`
+      })
+    },
     // 检查标签是否在允许列表中
     isTagInAllowedList(tag) {
       if (!tag || this.projectTags.length === 0) {
@@ -2281,4 +2290,4 @@ export default {
 }
 .confirm-dialog p { color: #444; margin: 0.25rem 0 0 0; }
 .confirm-dialog .dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
-</style>
+</style>  

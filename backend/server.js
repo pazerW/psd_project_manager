@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs-extra");
+const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const projectRoutes = require("./routes/projects");
 const taskRoutes = require("./routes/tasks");
@@ -9,6 +10,7 @@ const uploadRoutes = require("./routes/upload");
 const psdRoutes = require("./routes/psd");
 const fileRoutes = require("./routes/files");
 const downloadRoutes = require("./routes/download");
+const aiProxyRoutes = require("./routes/ai-proxy");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,9 +64,31 @@ app.use("/api", (req, res, next) => {
 
 // 路由
 app.use("/api/projects", projectRoutes);
+
+// 代理外部API - 必须在 /api/tasks 之前
+app.get(
+  "/api/tasks/active",
+  createProxyMiddleware({
+    target: "http://192.168.3.150:3001",
+    changeOrigin: true,
+    logLevel: "debug",
+  })
+);
+
+// 代理外部最近任务列表
+app.get(
+  "/api/tasks/recent",
+  createProxyMiddleware({
+    target: "http://192.168.3.150:3001",
+    changeOrigin: true,
+    logLevel: "debug",
+  })
+);
+
 app.use("/api/tasks", taskRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/psd", psdRoutes); // 保留向后兼容
+app.use("/api/ai", aiProxyRoutes); // AI API 代理
 
 // 文件变化通知（SSE）
 const changesRoutes = require("./routes/changes")(DATA_PATH);

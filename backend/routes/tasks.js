@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("fs-extra");
 const path = require("path");
 const matter = require("gray-matter");
+const axios = require("axios");
 const {
   ensureReadme,
   updateFileDescription,
@@ -10,6 +11,62 @@ const {
 } = require("../utils/readme");
 
 const router = express.Router();
+
+// 获取任务级递增文件编号并持久化到 README.md 的 frontmatter.lastId
+async function getNextFileId(taskPath) {
+  const readmePath = path.join(taskPath, "README.md");
+  try {
+    await fs.ensureDir(taskPath);
+    const matter = require("gray-matter");
+
+    let content = "";
+    let front = {};
+
+    if (await fs.pathExists(readmePath)) {
+      const fileContent = await fs.readFile(readmePath, "utf8");
+      const parsed = matter(fileContent);
+      content = parsed.content || "";
+      front = parsed.data || {};
+    }
+
+    // 兼容已有项目：计算已存在的最大编号，初始值为9以便首次分配为10
+    let maxExisting = 9;
+
+    if (front.fileIds && typeof front.fileIds === "object") {
+      for (const v of Object.values(front.fileIds)) {
+        const n = parseInt(v, 10);
+        if (!isNaN(n) && n > maxExisting) maxExisting = n;
+      }
+    }
+
+    try {
+      const files = await fs.readdir(taskPath);
+      for (const f of files) {
+        if (f === "README.md") continue;
+        const m = f.match(/_(\d+)(?:\.[^.]+)?$/);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && n > maxExisting) maxExisting = n;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    if (typeof front.lastId !== "number" || front.lastId < maxExisting) {
+      front.lastId = maxExisting;
+    }
+
+    front.lastId = (front.lastId || 0) + 1;
+    const newContent = matter.stringify(content, front);
+    await fs.writeFile(readmePath, newContent, "utf8");
+
+    return front.lastId;
+  } catch (err) {
+    console.error("getNextFileId 错误:", err.message);
+    throw err;
+  }
+}
 
 // 任务状态更新互斥锁映射
 const taskUpdateLocks = new Map();
@@ -376,6 +433,108 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
   }
 });
 
+// 从远程 URL 下载图片并保存到任务目录
+router.post("/:projectName/:taskName/save-image", async (req, res) => {
+  try {
+    const { projectName, taskName } = req.params;
+    const { url, filename } = req.body || {};
+
+    if (!url) return res.status(400).json({ error: "url is required" });
+    // 仅允许 http/https
+    if (!/^https?:\/\//i.test(url))
+      return res
+        .status(400)
+        .json({ error: "Only http/https URLs are allowed" });
+
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    if (!(await fs.pathExists(taskPath)))
+      return res.status(404).json({ error: "Task not found" });
+
+    // 推断文件名
+    let saveName =
+      filename && String(filename).trim() ? String(filename).trim() : null;
+    if (!saveName) {
+      try {
+        const parsed = new URL(url);
+        saveName = path.basename(parsed.pathname) || `image-${Date.now()}.png`;
+      } catch (e) {
+        saveName = `image-${Date.now()}.png`;
+      }
+    }
+
+    // 防止路径穿越
+    if (
+      saveName.includes("..") ||
+      saveName.includes("/") ||
+      saveName.includes("\\")
+    ) {
+      return res.status(400).json({ error: "Invalid filename" });
+    }
+
+    // 使用任务级递增 ID 生成文件名，保持与上传/合并时相同规则
+    const fileExt = path.extname(saveName) || ".png";
+    // 目标目录
+    const targetDir = taskPath;
+    await fs.ensureDir(targetDir);
+
+    // 获取递增文件编号并生成新文件名
+    const fileId = await getNextFileId(targetDir);
+    const newFileName = `${projectName}_${taskName}_${fileId}${fileExt}`;
+    const destPath = path.join(targetDir, newFileName);
+
+    // 下载流并写入文件
+    const response = await axios.get(url, {
+      responseType: "stream",
+      timeout: 20000,
+    });
+    const writer = fs.createWriteStream(destPath);
+    await new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      let errored = false;
+      writer.on("error", (err) => {
+        errored = true;
+        reject(err);
+      });
+      writer.on("close", () => {
+        if (!errored) resolve();
+      });
+    });
+
+    // 将编号写入 README frontmatter 的 fileIds
+    try {
+      await saveFileIdToReadme(
+        req.dataPath,
+        projectName,
+        taskName,
+        newFileName,
+        fileId
+      );
+    } catch (e) {
+      console.error("保存文件编号到 README 失败:", e.message);
+    }
+
+    // 异步预生成缩略图
+    setImmediate(() => {
+      try {
+        pregen缩略图(req.dataPath, projectName, taskName, newFileName).catch(
+          (err) => console.error("预生成缩略图失败:", err.message)
+        );
+      } catch (e) {
+        console.error("启动缩略图任务失败:", e.message);
+      }
+    });
+
+    // 返回保存后的信息和下载链接
+    const downloadUrl = `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
+      newFileName
+    )}`;
+    res.json({ success: true, filename: newFileName, downloadUrl });
+  } catch (error) {
+    console.error("save-image error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 获取项目中所有已使用的状态
 router.get("/:projectName/statuses/list", async (req, res) => {
   try {
@@ -611,6 +770,255 @@ router.post("/:projectName/:taskName/comment", async (req, res) => {
     res.json({ success: true, message: "留言添加成功" });
   } catch (error) {
     console.error("添加留言失败:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 保存AI任务日志
+router.post("/:projectName/:taskName/ai-log", async (req, res) => {
+  try {
+    const { projectName, taskName } = req.params;
+    const logData = req.body;
+
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const logPath = path.join(taskPath, "task_log.md");
+
+    // 确保任务目录存在
+    if (!(await fs.pathExists(taskPath))) {
+      return res.status(404).json({ error: "任务目录不存在" });
+    }
+
+    // 构建日志条目
+    const timestamp =
+      logData.time ||
+      new Date().toISOString().replace("T", " ").substring(0, 16);
+    let logEntry = `\n### ${timestamp}\n\n`;
+    logEntry += `**job_id**: ${logData.job_id}\n\n`;
+    logEntry += `**template_id**: ${logData.template_id}\n\n`;
+    logEntry += `**template_name**: ${logData.template_name}\n\n`;
+    logEntry += `**prompt**: ${logData.prompt}\n\n`;
+
+    if (logData.image) {
+      logEntry += `**image**: ${logData.image}\n\n`;
+    }
+
+    if (logData.status) {
+      logEntry += `**status**: ${logData.status}\n\n`;
+    }
+
+    if (logData.result) {
+      logEntry += `**result**:\n\n\`\`\`json\n${JSON.stringify(
+        logData.result,
+        null,
+        2
+      )}\n\`\`\`\n\n`;
+    }
+
+    logEntry += `---\n`;
+
+    // 追加到日志文件
+    await fs.appendFile(logPath, logEntry, "utf8");
+
+    res.json({ success: true, message: "日志保存成功" });
+  } catch (error) {
+    console.error("保存AI日志失败:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 读取AI任务日志
+router.get("/:projectName/:taskName/ai-log", async (req, res) => {
+  try {
+    const { projectName, taskName } = req.params;
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const logPath = path.join(taskPath, "task_log.md");
+
+    if (!(await fs.pathExists(logPath))) {
+      return res.json({ logs: [] });
+    }
+
+    const logContent = await fs.readFile(logPath, "utf8");
+
+    // 解析日志文件
+    const logs = [];
+    const sections = logContent.split("###").filter((s) => s.trim());
+
+    for (const section of sections) {
+      const lines = section.trim().split("\n");
+      if (lines.length === 0) continue;
+
+      const log = {
+        time: lines[0].trim(),
+      };
+
+      // 解析各个字段
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith("**job_id**:")) {
+          log.job_id = line.replace("**job_id**:", "").trim();
+        } else if (line.startsWith("**template_id**:")) {
+          log.template_id = line.replace("**template_id**:", "").trim();
+        } else if (line.startsWith("**template_name**:")) {
+          log.template_name = line.replace("**template_name**:", "").trim();
+        } else if (line.startsWith("**prompt**:")) {
+          log.prompt = line.replace("**prompt**:", "").trim();
+        } else if (line.startsWith("**image**:")) {
+          log.image = line.replace("**image**:", "").trim();
+        } else if (line.startsWith("**status**:")) {
+          log.status = line.replace("**status**:", "").trim();
+        } else if (line.startsWith("**result**:")) {
+          // 结果可能是多行的JSON
+          let resultStart = i + 1;
+          let resultLines = [];
+          while (
+            resultStart < lines.length &&
+            !lines[resultStart].startsWith("---")
+          ) {
+            resultLines.push(lines[resultStart]);
+            resultStart++;
+          }
+          log.result = resultLines.join("\n").trim();
+        }
+      }
+
+      if (log.job_id) {
+        logs.push(log);
+      }
+    }
+
+    res.json({ logs: logs.reverse() }); // 最新的在前面
+  } catch (error) {
+    console.error("读取AI日志失败:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 更新AI任务日志（用于更新任务结果）
+router.put("/:projectName/:taskName/ai-log/:jobId", async (req, res) => {
+  try {
+    const { projectName, taskName, jobId } = req.params;
+    const { status, result } = req.body;
+
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const logPath = path.join(taskPath, "task_log.md");
+
+    if (!(await fs.pathExists(logPath))) {
+      return res.status(404).json({ error: "日志文件不存在" });
+    }
+
+    let logContent = await fs.readFile(logPath, "utf8");
+
+    // 使用简单的字符串查找和替换方法
+    const lines = logContent.split("\n");
+    let inTargetSection = false;
+    let sectionStartIndex = -1;
+    let statusLineIndex = -1;
+    let resultStartIndex = -1;
+    let resultEndIndex = -1;
+
+    // 查找目标job_id所在的section
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith("### ")) {
+        if (inTargetSection) {
+          // 遇到下一个section，结束当前section
+          break;
+        }
+        sectionStartIndex = i;
+        inTargetSection = false;
+      }
+
+      if (line.includes(`**job_id**: ${jobId}`)) {
+        inTargetSection = true;
+      }
+
+      if (inTargetSection) {
+        if (line.startsWith("**status**:")) {
+          statusLineIndex = i;
+        }
+        if (line.startsWith("**result**:")) {
+          resultStartIndex = i;
+        }
+        if (resultStartIndex !== -1 && line.trim() === "---") {
+          resultEndIndex = i;
+          break;
+        }
+        if (line.trim() === "---" && resultStartIndex === -1) {
+          resultEndIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (!inTargetSection) {
+      return res.status(404).json({ error: "未找到对应的任务记录" });
+    }
+
+    // 更新状态
+    if (statusLineIndex !== -1) {
+      lines[statusLineIndex] = `**status**: ${status}`;
+    }
+
+    // 更新或添加结果
+    if (result) {
+      const resultLines = [
+        "",
+        "**result**:",
+        "",
+        "```json",
+        JSON.stringify(result, null, 2),
+        "```",
+        "",
+      ];
+
+      if (resultStartIndex !== -1) {
+        // 替换现有结果
+        lines.splice(
+          resultStartIndex,
+          resultEndIndex - resultStartIndex,
+          ...resultLines
+        );
+      } else {
+        // 在---之前插入结果
+        lines.splice(resultEndIndex, 0, ...resultLines);
+      }
+    }
+
+    logContent = lines.join("\n");
+    await fs.writeFile(logPath, logContent, "utf8");
+
+    res.json({ success: true, message: "日志更新成功" });
+  } catch (error) {
+    console.error("更新AI日志失败:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 删除AI任务日志条目
+router.delete("/:projectName/:taskName/ai-log/:jobId", async (req, res) => {
+  try {
+    const { projectName, taskName, jobId } = req.params;
+    const taskPath = path.join(req.dataPath, projectName, taskName);
+    const logPath = path.join(taskPath, "task_log.md");
+
+    if (!(await fs.pathExists(logPath))) {
+      return res.status(404).json({ error: "日志文件不存在" });
+    }
+
+    const content = await fs.readFile(logPath, "utf8");
+
+    // 将文件按部分拆分，去除包含指定 jobId 的部分
+    const parts = content.split("###");
+    const header = parts.shift() || "";
+    const kept = parts.filter((sec) => !sec.includes(`**job_id**: ${jobId}`));
+    const newContent = header + kept.map((s) => "###" + s).join("");
+
+    await fs.writeFile(logPath, newContent, "utf8");
+
+    res.json({ success: true, message: "日志已删除" });
+  } catch (error) {
+    console.error("删除AI日志失败:", error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -22,6 +22,7 @@
             {{ $route.params.taskName }}
           </span>
         </nav>
+        <active-tasks-dropdown />
         <div class="network-toggle">
           <select v-model="mode" @change="onModeChange" class="mode-select">
             <option value="internal">内网</option>
@@ -39,9 +40,11 @@
 
 <script>
 import networkMode from './utils/networkMode'
+import ActiveTasksDropdown from './components/ActiveTasksDropdown.vue'
+
 export default {
-  name: 'App'
-  ,
+  name: 'App',
+  components: { ActiveTasksDropdown },
   data() {
     return {
       mode: networkMode.state.mode
@@ -161,6 +164,15 @@ export default {
 
 .btn-secondary:hover {
   background: #545b62;
+}
+
+.btn-success {
+  background: #28a745;
+  color: white;
+}
+
+.btn-success:hover {
+  background: #218838;
 }
 
 .status-badge {
