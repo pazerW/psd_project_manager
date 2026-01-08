@@ -613,7 +613,6 @@ export default {
         // 保存任务日志
         await this.saveTaskLog(jobData, selectedFile)
         
-        alert(`任务已提交！Job ID: ${jobData.job_id}`)
         
         // 重新加载任务日志
         await this.loadTaskLogs()
@@ -721,7 +720,6 @@ export default {
         this.savingImageMap = Object.assign({}, this.savingImageMap, { [url]: true })
         const resp = await axios.post(`/api/tasks/${this.projectName}/${this.taskName}/save-image`, { url })
         if (resp.data && resp.data.success) {
-          alert(`已保存为 ${resp.data.filename}`)
           // 刷新任务文件列表以显示新文件
           await this.loadTaskInfo()
         } else {
@@ -744,7 +742,6 @@ export default {
         const url = this.getAIImageUrl(img.url)
         const resp = await axios.post(`/api/tasks/${this.projectName}/${this.taskName}/save-image`, { url, filename: img.filename })
         if (resp.data && resp.data.success) {
-          alert(`图片已保存为 ${resp.data.filename}`)
           // 重新加载任务文件列表（以便可在可用图片中看到）
           await this.loadTaskInfo()
         } else {
