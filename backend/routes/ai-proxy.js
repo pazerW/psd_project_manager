@@ -6,6 +6,9 @@ const router = express.Router();
 
 const AI_API_BASE = process.env.AI_API_BASE || "http://192.168.3.150:3001";
 
+// 启动时输出 AI API 配置
+console.log(`[AI Proxy] AI_API_BASE: ${AI_API_BASE}`);
+
 // 配置multer用于内存存储
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -15,10 +18,13 @@ const upload = multer({
 // 获取所有模板
 router.get("/templates", async (req, res) => {
   try {
+    console.log(`[AI Proxy] Fetching templates from: ${AI_API_BASE}/api/templates`);
     const response = await axios.get(`${AI_API_BASE}/api/templates`);
     res.json(response.data);
   } catch (error) {
     console.error("Failed to fetch templates:", error.message);
+    console.error("AI_API_BASE:", AI_API_BASE);
+    console.error("Error details:", error.code, error.response?.status);
     res.status(error.response?.status || 500).json({
       error:
         error.response?.data?.error ||
