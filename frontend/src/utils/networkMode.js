@@ -33,7 +33,7 @@ function getNormalizedInternalOrigin() {
     return u.origin;
   } catch (e) {
     // add protocol if missing - use current page's protocol to avoid mixed content
-    const protocol = window.location.protocol || 'http:';
+    const protocol = window.location.protocol || "http:";
     const withProto = candidate.startsWith("http")
       ? candidate
       : `${protocol}//${candidate}`;
