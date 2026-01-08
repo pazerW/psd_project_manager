@@ -231,7 +231,7 @@
             <div 
               v-for="(statusObj, index) in allowedStatuses" 
               :key="index"
-              <div class="status-item"
+              class="status-item"
               >
                 <input 
                   v-model="allowedStatuses[index].label"
@@ -480,7 +480,6 @@ export default {
       try {
         // 加载项目信息（强制不走缓存）
         const projectResponse = await axios.get(`/api/projects/${this.projectName}`, { headers: { 'Cache-Control': 'no-store' } })
-        console.debug('[debug] loadProject response status:', projectResponse.data && projectResponse.data.status)
         this.projectInfo = projectResponse.data
         this.allTasks = projectResponse.data.tasks || []
         // 为每个任务异步准备缩略图（优先 defaultFile，否则选择最早上传的图片）
@@ -536,15 +535,15 @@ export default {
           return
         }
 
-        // 否则请求任务文件列表，选择最早的图片文件
+        // 否则请求任务文件列表，选择最新的图片文件
         const resp = await axios.get(`/api/tasks/${this.projectName}/${task.name}/files`)
         const files = resp.data || []
         if (!files || files.length === 0) return
 
-        // 过滤图片类文件（psd/ai/image等），并按 modified 升序排序
+        // 过滤图片类文件（psd/ai/image等），并按 modified 降序排序（最新的在前）
         const candidates = files.filter(f => ['image','psd','ai','svg'].includes(f.type) || /\.(jpg|jpeg|png|gif|bmp|webp|psd|ai|svg|tiff|tif)$/i.test(f.name))
         if (candidates.length === 0) return
-        candidates.sort((a,b) => new Date(a.modified) - new Date(b.modified))
+        candidates.sort((a,b) => new Date(b.modified) - new Date(a.modified))
         const pick = candidates[0]
         this.taskThumbnails[task.name] = networkMode.getDownloadUrl(`/api/files/thumbnail/${encodeURIComponent(this.projectName)}/${encodeURIComponent(task.name)}/${encodeURIComponent(pick.name)}`)
       } catch (err) {
