@@ -92,10 +92,10 @@
           </span>
         </div>
         
-        <!-- 默认文件缩略图（显示逻辑使用可用的缩略图 URL） -->
-        <div v-if="getTaskThumbnailUrl(task)" class="task-thumbnail">
+        <!-- 默认文件缩略图（始终显示） -->
+        <div class="task-thumbnail">
           <img
-            :src="getTaskThumbnailUrl(task)"
+            :src="getTaskThumbnailUrl(task) || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCI+5pqC5peg57yp55Wl5Zu+PC90ZXh0Pjwvc3ZnPg=='"
             :alt="(task.frontmatter && task.frontmatter.defaultFile) || task.defaultFile || ''"
             @error="handleThumbError($event, task)"
           />
@@ -617,7 +617,7 @@ export default {
     },
 
     handleThumbError(event, task) {
-      console.error('Failed to load task thumbnail for:', task.name, task.defaultFile)
+      console.debug('Failed to load task thumbnail for:', task.name, task.defaultFile)
       event.target.onerror = null
       // 简单SVG占位符（灰色）
       event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM5OTkiIGZvbnQtc2l6ZT0iMjQiIGZvbnQtZmFtaWx5PSJBcmlhbCI+5p2O5ZCIPC90ZXh0Pjwvc3ZnPg=='
