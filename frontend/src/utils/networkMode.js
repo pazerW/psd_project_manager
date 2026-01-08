@@ -32,10 +32,11 @@ function getNormalizedInternalOrigin() {
     let u = new URL(candidate);
     return u.origin;
   } catch (e) {
-    // add protocol if missing
+    // add protocol if missing - use current page's protocol to avoid mixed content
+    const protocol = window.location.protocol || 'http:';
     const withProto = candidate.startsWith("http")
       ? candidate
-      : `http://${candidate}`;
+      : `${protocol}//${candidate}`;
     try {
       const u = new URL(withProto);
       return u.origin;
