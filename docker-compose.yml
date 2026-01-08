@@ -10,6 +10,8 @@ services:
     environment:
       - PUID=1000
       - PGID=100
+      # 使用Docker网关访问宿主机（192.168.3.150就是本机）
+      - AI_API_BASE=http://172.29.12.1:3001
     volumes:
       # 持久化数据目录
       - /share/data:/app/data

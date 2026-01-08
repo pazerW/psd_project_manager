@@ -18,7 +18,9 @@ const upload = multer({
 // 获取所有模板
 router.get("/templates", async (req, res) => {
   try {
-    console.log(`[AI Proxy] Fetching templates from: ${AI_API_BASE}/api/templates`);
+    console.log(
+      `[AI Proxy] Fetching templates from: ${AI_API_BASE}/api/templates`
+    );
     const response = await axios.get(`${AI_API_BASE}/api/templates`);
     res.json(response.data);
   } catch (error) {

@@ -197,11 +197,10 @@
                       <div class="result-section-title">Images ({{ getResultData(log.result).images.length }})</div>
                       <div class="image-grid">
                           <div v-for="(img, idx) in getResultData(log.result).images" :key="idx" class="result-image-item">
-                            <img :src="getAIImageUrl(img.url)" @click.prevent="openPreview(getAIImageUrl(img.url))" />
-                            <div class="image-filename" :title="img.filename">{{ img.filename }}</div>
                             <button class="btn btn-sm btn-success" @click.stop.prevent="saveImage(log, img)" :disabled="savingImageMap[getAIImageUrl(img.url)]">
                               {{ savingImageMap[getAIImageUrl(img.url)] ? '保存中...' : '保存到任务' }}
                             </button>
+                            <img :src="getAIImageUrl(img.url)" @click.prevent="openPreview(getAIImageUrl(img.url))" />
                           </div>
                       </div>
                     </div>
@@ -213,10 +212,10 @@
                       </div>
                     </div>
 
-                    <div v-if="Object.keys(getResultData(log.result)).filter(k => !['images','texts'].includes(k)).length" class="result-other">
+                    <!-- <div v-if="Object.keys(getResultData(log.result)).filter(k => !['images','texts'].includes(k)).length" class="result-other">
                       <div class="result-section-title">Details</div>
                       <pre style="font-size: 0.75rem; color: #666;">{{ filterExtraData(getResultData(log.result)) }}</pre>
-                    </div>
+                    </div> -->
 
                   </div>
 
@@ -1488,7 +1487,7 @@ export default {
 }
 
 .result-image-item img {
-  height: 100px; /* 降低高度，增加单屏显示数量 */
+  height: 500px; /* 降低高度，增加单屏显示数量 */
   object-fit: cover;
   border-radius: 2px;
 }
