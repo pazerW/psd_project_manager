@@ -1391,6 +1391,8 @@ export default {
 .task-detail {
   overflow-x: hidden;
   box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 .task-detail * {
   box-sizing: border-box;
@@ -1431,11 +1433,20 @@ export default {
 .task-content {
   display: grid;
   gap: 2rem;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 
 
 .readme-section h3,
+.psd-section {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 .psd-section h3 {
   color: #2c3e50;
   margin-bottom: 1rem;
@@ -1444,6 +1455,9 @@ export default {
 
 .readme-section {
   margin-bottom: 2rem;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .frontmatter {
@@ -1479,6 +1493,8 @@ export default {
   box-shadow: 0 1px 4px rgba(16,24,40,0.04);
   color: #333;
   margin-bottom: 5rem;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .readme-content p {
@@ -1505,7 +1521,9 @@ export default {
   border: 1px solid #e6eef6;
   border-radius: 10px;
   box-shadow: 0 6px 18px rgba(16,24,40,0.04);
-  overflow: visible;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* 左侧强调条已移除，恢复常规内边距 */
@@ -1552,13 +1570,40 @@ export default {
   border-left: 4px solid #e5e5e5;
 }
 
-.readme-content pre,
-.readme-content code {
+.readme-content pre {
   margin: 1.2em 0;
+  overflow-x: auto;
+  max-width: 100%;
+  white-space: pre;
+  word-wrap: normal;
+}
+
+.readme-content code {
+  margin: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.readme-content pre code {
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
 }
 
 .readme-content hr {
   margin: 2em 0;
+}
+
+.readme-content table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.readme-content img {
+  max-width: 100%;
+  height: auto;
 }
 
 .no-readme {
