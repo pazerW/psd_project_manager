@@ -1388,6 +1388,13 @@ export default {
 </script>
 
 <style scoped>
+.task-detail {
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+.task-detail * {
+  box-sizing: border-box;
+}
 .aera_title{
   display: flex; 
   justify-content: space-between; 
@@ -2303,9 +2310,9 @@ export default {
   display: flex;
   align-items: center;
   gap: 1rem;
-  /* 占满整个视口，使 image-wrap 可在全屏范围内拖拽/缩放 */
-  width: 100vw;
-  height: 100vh;
+  /* 使用 100% 避免与滚动条造成 100vw 导致的横向溢出 */
+  width: 100%;
+  height: 100%;
 }
 .lightbox-image-wrap {
   /* 占满父容器（整个视口），便于在全屏范围内平移 */
