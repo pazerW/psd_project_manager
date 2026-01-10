@@ -433,12 +433,20 @@
           <div v-else class="upload-progress">
             <h4>已选择 {{ selectedFiles.length }} 个文件</h4>
             <ul class="selected-files-list">
-              <li v-for="(f, idx) in selectedFiles" :key="idx">
-                <strong>{{ f.name }}</strong> · {{ formatFileSize(f.size) }}
-                <div class="progress-bar small">
+              <li v-for="(f, idx) in selectedFiles" :key="idx" :class="'status-' + (uploadStatusMap[f.name] || 'pending')">
+                <div class="file-info">
+                  <strong>{{ f.name }}</strong> · {{ formatFileSize(f.size) }}
+                  <span class="status-badge" v-if="uploadStatusMap[f.name]">
+                    <span v-if="uploadStatusMap[f.name] === 'pending'">⏳ 等待中</span>
+                    <span v-if="uploadStatusMap[f.name] === 'uploading'">📤 上传中</span>
+                    <span v-if="uploadStatusMap[f.name] === 'success'">✅ 完成</span>
+                    <span v-if="uploadStatusMap[f.name] === 'error'">❌ 失败</span>
+                  </span>
+                </div>
+                <div class="progress-bar small" v-if="uploadStatusMap[f.name] === 'uploading' || uploadStatusMap[f.name] === 'success'">
                   <div class="progress-fill" :style="{ width: (getFileProgress(f) + '%' ) }"></div>
                 </div>
-                <div class="progress-text small">{{ Math.round(getFileProgress(f)) }}%</div>
+                <div class="progress-text small" v-if="uploadStatusMap[f.name] === 'uploading'">{{ Math.round(getFileProgress(f)) }}%</div>
               </li>
             </ul>
             
@@ -529,6 +537,7 @@ export default {
       uploadProgressMap: {}, // 每个上传的进度 (uploadId -> percent)
       uploadIds: [], // 活动的 uploadId 列表
       fileToUploadIdMap: {}, // 文件名到uploadId的映射
+      uploadStatusMap: {}, // 每个文件的上传状态 (fileName -> 'pending'|'uploading'|'success'|'error')
       uploadTags: '', // 上传时的标签
       editingDescription: null, // 正在编辑描述的文件名
       editingDescriptionText: '', // 编辑中的描述文本
@@ -896,16 +905,25 @@ export default {
       this.uploadProgressMap = {}
       this.uploadIds = []
       this.fileToUploadIdMap = {}
+      this.uploadStatusMap = {}
+      
+      // 初始化所有文件状态为pending
+      this.selectedFiles.forEach(file => {
+        this.uploadStatusMap[file.name] = 'pending'
+      })
 
       // 为每个文件创建上传任务，添加小延迟避免uploadId冲突
       const uploads = this.selectedFiles.map((file, index) => 
         new Promise((resolve, reject) => {
           setTimeout(async () => {
             try {
+              this.uploadStatusMap[file.name] = 'uploading'
               await this.uploadFileInChunks(file)
-              resolve()
+              this.uploadStatusMap[file.name] = 'success'
+              resolve(file.name)
             } catch (err) {
-              reject(err)
+              this.uploadStatusMap[file.name] = 'error'
+              reject({ fileName: file.name, error: err })
             }
           }, index * 10)
         })
@@ -913,21 +931,31 @@ export default {
 
       try {
         const results = await Promise.allSettled(uploads)
+        const succeeded = results.filter(r => r.status === 'fulfilled')
         const failed = results.filter(r => r.status === 'rejected')
+        
+        console.log(`上传完成: 成功 ${succeeded.length}/${this.selectedFiles.length} 个文件`)
         
         if (failed.length > 0) {
           console.error(`${failed.length} 个文件上传失败:`, failed.map(f => f.reason))
-          alert(`${failed.length} 个文件上传失败，请查看控制台了解详情`)
+          const msg = `上传完成：\n成功 ${succeeded.length} 个\n失败 ${failed.length} 个\n\n失败的文件：\n${failed.map(f => f.reason?.fileName || '未知文件').join('\n')}`
+          alert(msg)
         } else {
-          console.log('所有文件上传成功')
+          console.log('所有文件上传成功！')
         }
         
+        // 刷新文件列表
         await this.loadTaskDetail()
-        this.resetUpload()
+        
+        // 如果所有文件都成功，自动关闭对话框；否则保持打开让用户查看状态
+        if (failed.length === 0) {
+          this.resetUpload()
+        } else {
+          this.uploading = false
+        }
       } catch (err) {
         console.error('One or more uploads failed:', err)
         alert('上传失败：' + (err.message || '未知错误'))
-      } finally {
         this.uploading = false
       }
     },
@@ -993,6 +1021,7 @@ export default {
       this.uploadProgressMap = {}
       this.uploadIds = []
       this.fileToUploadIdMap = {}
+      this.uploadStatusMap = {}
     },
 
     resetUpload() {
@@ -1001,6 +1030,7 @@ export default {
       this.uploadProgressMap = {}
       this.uploadIds = []
       this.fileToUploadIdMap = {}
+      this.uploadStatusMap = {}
       this.uploadTags = ''
       this.showUpload = false
     },
@@ -2349,4 +2379,66 @@ export default {
 }
 .confirm-dialog p { color: #444; margin: 0.25rem 0 0 0; }
 .confirm-dialog .dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+/* 多文件上传列表样式 */
+.selected-files-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.selected-files-list li {
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.selected-files-list li.status-pending {
+  background: #f8f9fa;
+}
+
+.selected-files-list li.status-uploading {
+  background: #e7f3ff;
+  border-color: #007bff;
+}
+
+.selected-files-list li.status-success {
+  background: #d4edda;
+  border-color: #28a745;
+}
+
+.selected-files-list li.status-error {
+  background: #f8d7da;
+  border-color: #dc3545;
+}
+
+.selected-files-list .file-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.selected-files-list .status-badge {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.7);
+}
+
+.selected-files-list .progress-bar.small {
+  height: 6px;
+  margin: 0.25rem 0;
+}
+
+.selected-files-list .progress-text.small {
+  font-size: 0.75rem;
+  color: #666;
+  text-align: right;
+}
+
 </style>  
