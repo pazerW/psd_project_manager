@@ -6,7 +6,7 @@ fileTags:
   测试项目_设计任务_3.psd: 定稿
 fileDescriptions:
   测试项目_设计任务_3.psd: '131311'
-updatedAt: 1766996043589
+updatedAt: 1767972361867
 fileIds:
   测试项目_设计任务_3.psd: 1
   测试项目_设计任务_4.psd: 5
@@ -16,8 +16,11 @@ fileIds:
   测试项目_设计任务_10.psd: 10
   测试项目_设计任务_11.psd: 11
   测试项目_设计任务_12.png: 12
-lastId: 15
-defaultFile: test-image.jpg
+  测试项目_设计任务_16.png: 16
+  测试项目_设计任务_18.png: 18
+  测试项目_设计任务_19.png: 19
+lastId: 19
+defaultFile: 测试项目_设计任务_10.psd
 ---
 
 # 设计任务

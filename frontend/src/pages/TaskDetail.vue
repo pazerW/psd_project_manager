@@ -22,12 +22,8 @@
       </div>
 
       <div class="task-actions">
-        <button class="btn btn-secondary" @click="showComment = true">
-          添加留言
-        </button>
-        <button class="btn btn-primary" @click="showUpload = true">
-          上传文件
-        </button>
+
+
         <button class="btn btn-success" @click="goToAIWorkbench">
           AI工作台
         </button>
@@ -69,7 +65,10 @@
       <div class="readme-section">
         
         <div v-if="taskInfo.readmeContent" class="readme-wrapper">
-          <h1 class="readme-title">README</h1>
+          <div  class="aera_title">
+            <h3 class="readme-title" style="margin: 0;">README</h3>
+            <button class="btn btn-secondary" @click="showComment = true">添加留言</button>
+          </div>
           <hr class="readme-sep" />
           <div class="readme-content" v-html="renderedReadme"></div>
         </div>
@@ -81,8 +80,12 @@
 
       <!-- PSD 文件区域 -->
       <div class="psd-section card">
-        <h3>设计文件 ({{ psdFiles.length }})</h3>
-
+        <div class="aera_title">
+          <h3>设计文件 ({{ psdFiles.length }})</h3>
+          <button class="btn btn-primary" @click="showUpload = true">
+            上传文件
+          </button>
+        </div>
         <div class="psd-toolbar">
           <div class="toolbar-left">
             <div class="toolbar-mode">
@@ -419,16 +422,25 @@
             ref="fileInput" 
             @change="handleFileSelect" 
             accept=".psd,.ai,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.tiff,.tif"
+            multiple
             style="display: none"
           />
-          <div v-if="!selectedFile" class="upload-prompt" @click="$refs.fileInput.click()">
-            <p>点击选择或拖拽设计文件到此处</p>
+          <div v-if="selectedFiles.length === 0" class="upload-prompt" @click="$refs.fileInput.click()">
+            <p>点击选择或拖拽设计文件到此处（支持多选）</p>
             <p class="upload-help">支持 PSD、AI、图片等文件类型的大文件分片上传</p>
           </div>
           
           <div v-else class="upload-progress">
-            <h4>{{ selectedFile.name }}</h4>
-            <p>文件大小: {{ formatFileSize(selectedFile.size) }}</p>
+            <h4>已选择 {{ selectedFiles.length }} 个文件</h4>
+            <ul class="selected-files-list">
+              <li v-for="(f, idx) in selectedFiles" :key="idx">
+                <strong>{{ f.name }}</strong> · {{ formatFileSize(f.size) }}
+                <div class="progress-bar small">
+                  <div class="progress-fill" :style="{ width: (getFileProgress(f) + '%' ) }"></div>
+                </div>
+                <div class="progress-text small">{{ Math.round(getFileProgress(f)) }}%</div>
+              </li>
+            </ul>
             
             <div class="upload-tags-input" v-if="projectTags.length > 0">
               <label>标签（可选）：</label>
@@ -452,10 +464,10 @@
             </div>
             
             <div v-if="uploading" class="progress-bar">
-              <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+              <div class="progress-fill" :style="{ width: (aggregateProgress() + '%') }"></div>
             </div>
             <p v-if="uploading" class="progress-text">
-              上传中... {{ Math.round(uploadProgress) }}%
+              上传中... {{ Math.round(aggregateProgress()) }}%
             </p>
             
             <div class="upload-actions">
@@ -512,10 +524,11 @@ export default {
       psdFiles: [],
       loading: true,
       showUpload: false,
-      selectedFile: null,
+      selectedFiles: [], // 支持多文件
       uploading: false,
-      uploadProgress: 0,
-      uploadId: null,
+      uploadProgressMap: {}, // 每个上传的进度 (uploadId -> percent)
+      uploadIds: [], // 活动的 uploadId 列表
+      fileToUploadIdMap: {}, // 文件名到uploadId的映射
       uploadTags: '', // 上传时的标签
       editingDescription: null, // 正在编辑描述的文件名
       editingDescriptionText: '', // 编辑中的描述文本
@@ -863,113 +876,150 @@ export default {
     },
     
     async handleDrop(event) {
-      const files = Array.from(event.dataTransfer.files)
-      const designFile = files.find(file => this.isValidFileType(file.name))
-      if (designFile) {
-        this.selectedFile = designFile
-        // 立即开始上传
-        await this.startUpload()
-      }
+      const files = Array.from(event.dataTransfer.files).filter(f => this.isValidFileType(f.name))
+      if (files.length === 0) return
+      this.selectedFiles = files
+      await this.startUploadMultiple()
     },
-    
+
     async handleFileSelect(event) {
-      const file = event.target.files[0]
-      if (file && this.isValidFileType(file.name)) {
-        this.selectedFile = file
-        // 立即开始上传
-        await this.startUpload()
-      }
+      const files = Array.from(event.target.files).filter(f => this.isValidFileType(f.name))
+      if (files.length === 0) return
+      this.selectedFiles = files
+      await this.startUploadMultiple()
     },
-    
-    async startUpload() {
-      if (!this.selectedFile) return
-      
+
+    async startUploadMultiple() {
+      if (!this.selectedFiles || this.selectedFiles.length === 0) return
+
       this.uploading = true
-      this.uploadProgress = 0
-      this.uploadId = Date.now().toString()
-      
+      this.uploadProgressMap = {}
+      this.uploadIds = []
+      this.fileToUploadIdMap = {}
+
+      // 为每个文件创建上传任务，添加小延迟避免uploadId冲突
+      const uploads = this.selectedFiles.map((file, index) => 
+        new Promise((resolve, reject) => {
+          setTimeout(async () => {
+            try {
+              await this.uploadFileInChunks(file)
+              resolve()
+            } catch (err) {
+              reject(err)
+            }
+          }, index * 10)
+        })
+      )
+
       try {
-        await this.uploadInChunks()
-        await this.loadTaskDetail() // 重新加载文件列表
-        this.resetUpload()
-      } catch (error) {
-        console.error('Upload failed:', error)
-        let errorMessage = '文件上传失败'
+        const results = await Promise.allSettled(uploads)
+        const failed = results.filter(r => r.status === 'rejected')
         
-        if (error.response) {
-          // 服务器返回的错误
-          errorMessage += `：${error.response.data?.error || error.response.statusText}`
-        } else if (error.request) {
-          // 网络错误
-          errorMessage += '：网络连接失败，请检查服务器是否正常运行'
+        if (failed.length > 0) {
+          console.error(`${failed.length} 个文件上传失败:`, failed.map(f => f.reason))
+          alert(`${failed.length} 个文件上传失败，请查看控制台了解详情`)
         } else {
-          // 其他错误
-          errorMessage += `：${error.message}`
+          console.log('所有文件上传成功')
         }
         
+        await this.loadTaskDetail()
+        this.resetUpload()
+      } catch (err) {
+        console.error('One or more uploads failed:', err)
+        alert('上传失败：' + (err.message || '未知错误'))
       } finally {
         this.uploading = false
       }
     },
-    
-    async uploadInChunks() {
-      const chunkSize = 5 * 1024 * 1024 // 5MB per chunk
-      const totalChunks = Math.ceil(this.selectedFile.size / chunkSize)
-      
-      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-        const start = chunkIndex * chunkSize
-        const end = Math.min(start + chunkSize, this.selectedFile.size)
-        const chunk = this.selectedFile.slice(start, end)
-        
-        const formData = new FormData()
-        formData.append('chunk', chunk)
-        formData.append('uploadId', this.uploadId)
-        formData.append('chunkIndex', chunkIndex.toString())
-        formData.append('totalChunks', totalChunks.toString())
-        formData.append('fileName', this.selectedFile.name)
-        formData.append('fileSize', this.selectedFile.size.toString())
-        
-        // 添加标签信息
-        if (this.uploadTags.trim()) {
-          formData.append('tags', this.uploadTags.trim())
-        }
-        
-        const uploadEndpoint = networkMode.getDownloadUrl(
-          `/api/upload/chunk/${this.projectName}/${this.taskName}`
-        )
 
-        await axios.post(uploadEndpoint, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        })
-        
-        this.uploadProgress = ((chunkIndex + 1) / totalChunks) * 100
-      }
-    },
-    
-    async cancelUpload() {
-      if (this.uploadId) {
-        try {
-          const cancelEndpoint = networkMode.getDownloadUrl(
-            `/api/upload/cancel/${this.uploadId}`
+    async uploadFileInChunks(file) {
+      const chunkSize = 5 * 1024 * 1024 // 5MB per chunk
+      const totalChunks = Math.ceil(file.size / chunkSize)
+      // 生成更唯一的uploadId：时间戳 + 文件名hash + 随机数
+      const fileHash = file.name.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)
+      const uploadId = `${Date.now()}_${Math.abs(fileHash)}_${Math.random().toString(36).slice(2,9)}`
+      
+      this.uploadIds.push(uploadId)
+      this.uploadProgressMap[uploadId] = 0
+      this.fileToUploadIdMap[file.name] = uploadId
+      
+      console.log(`开始上传文件: ${file.name}, uploadId: ${uploadId}`)
+
+      try {
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          const start = chunkIndex * chunkSize
+          const end = Math.min(start + chunkSize, file.size)
+          const chunk = file.slice(start, end)
+
+          const formData = new FormData()
+          formData.append('chunk', chunk)
+          formData.append('uploadId', uploadId)
+          formData.append('chunkIndex', chunkIndex.toString())
+          formData.append('totalChunks', totalChunks.toString())
+          formData.append('fileName', file.name)
+          formData.append('fileSize', file.size.toString())
+
+          if (this.uploadTags && this.uploadTags.trim()) {
+            formData.append('tags', this.uploadTags.trim())
+          }
+
+          const uploadEndpoint = networkMode.getDownloadUrl(
+            `/api/upload/chunk/${this.projectName}/${this.taskName}`
           )
-          await axios.delete(cancelEndpoint)
-        } catch (error) {
-          console.error('Failed to cancel upload:', error)
+
+          await axios.post(uploadEndpoint, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+
+          const percent = ((chunkIndex + 1) / totalChunks) * 100
+          this.uploadProgressMap[uploadId] = percent
         }
+      } catch (error) {
+        console.error('Upload failed for', file.name, error)
+        throw error
+      }
+    },
+
+    async cancelUpload() {
+      try {
+        for (const id of this.uploadIds || []) {
+          const cancelEndpoint = networkMode.getDownloadUrl(`/api/upload/cancel/${id}`)
+          try { await axios.delete(cancelEndpoint) } catch (e) { console.error('Failed to cancel', id, e) }
+        }
+      } catch (err) {
+        console.error('Failed to cancel uploads:', err)
       }
       this.uploading = false
-      this.uploadProgress = 0
+      this.uploadProgressMap = {}
+      this.uploadIds = []
+      this.fileToUploadIdMap = {}
     },
-    
+
     resetUpload() {
-      this.selectedFile = null
+      this.selectedFiles = []
       this.uploading = false
-      this.uploadProgress = 0
-      this.uploadId = null
+      this.uploadProgressMap = {}
+      this.uploadIds = []
+      this.fileToUploadIdMap = {}
       this.uploadTags = ''
       this.showUpload = false
+    },
+
+    getFileProgress(file) {
+      // 通过文件名映射找到对应的uploadId
+      const uploadId = this.fileToUploadIdMap[file.name]
+      if (uploadId && this.uploadProgressMap[uploadId] !== undefined) {
+        return this.uploadProgressMap[uploadId]
+      }
+      // 如果找不到，返回0
+      return 0
+    },
+
+    aggregateProgress() {
+      const vals = Object.values(this.uploadProgressMap || {})
+      if (!vals || vals.length === 0) return 0
+      const sum = vals.reduce((s, v) => s + (Number(v) || 0), 0)
+      return sum / vals.length
     },
     
     // 弹出删除确认框（由 UI 按钮调用）
@@ -1306,6 +1356,15 @@ export default {
 </script>
 
 <style scoped>
+.aera_title{
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  width: 100%;
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 0.75rem;
+  font-size: 1.5rem;
+}
 .page-header {
   margin-bottom: 2rem;
   display: flex;
@@ -1335,11 +1394,12 @@ export default {
   gap: 2rem;
 }
 
+
+
 .readme-section h3,
 .psd-section h3 {
   color: #2c3e50;
   margin-bottom: 1rem;
-  border-bottom: 2px solid #e5e5e5;
   padding-bottom: 0.5rem;
 }
 
@@ -1412,7 +1472,6 @@ export default {
 /* 左侧强调条已移除，恢复常规内边距 */
 .readme-title {
   margin: 0 0 0.5rem 0;
-  font-size: 1.05rem;
   color: #102a43;
   font-weight: 700;
   display: block;
