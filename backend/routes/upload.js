@@ -5,6 +5,36 @@ const path = require("path");
 
 const router = express.Router();
 
+// README文件锁：防止并发写入冲突
+const readmeLocks = new Map(); // taskPath -> Promise
+
+function acquireReadmeLock(taskPath) {
+  if (!readmeLocks.has(taskPath)) {
+    readmeLocks.set(taskPath, Promise.resolve());
+  }
+
+  const currentLock = readmeLocks.get(taskPath);
+  let releaseLock;
+
+  const newLock = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+
+  readmeLocks.set(
+    taskPath,
+    currentLock.then(() => newLock)
+  );
+
+  return async (fn) => {
+    try {
+      await currentLock;
+      return await fn();
+    } finally {
+      releaseLock();
+    }
+  };
+}
+
 // 配置multer用于分片上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -94,8 +124,12 @@ router.post(
         uploadInfo.uploadedChunks.length === parseInt(totalChunks);
 
       if (allChunksUploaded) {
-        // 合并分片
+        console.log(`所有分片已上传完成，开始合并文件: ${fileName} (uploadId: ${uploadId})`);
+        
+        // 合并分片（同步等待完成）
         await mergeChunks(req.dataPath, uploadInfo);
+        
+        console.log(`文件合并和保存完成: ${fileName} (uploadId: ${uploadId})`);
 
         // 清理临时文件
         await cleanupTempFiles(req.dataPath, uploadId);
@@ -204,27 +238,31 @@ async function mergeChunks(dataPath, uploadInfo) {
       writeStream.on("error", reject);
     });
 
-    // 文件合并完成后，分配递增编号并异步预生成缩略图（不阻塞响应）
+    console.log(`文件合并完成: ${targetPath}`);
+
+    // 文件合并完成后，立即保存文件ID到README（使用文件锁保证原子性）
     const finalFileName = uploadInfo.renamedFileName || fileName;
     const tags = uploadInfo.tags || "";
 
+    console.log(`开始保存文件ID: ${finalFileName} -> ${fileId}`);
+    
+    // 先保存文件ID，这是最重要的，必须同步完成
     try {
-      const taskPath = path.join(dataPath, projectName, taskName);
-      const idToSave =
-        typeof fileId !== "undefined" ? fileId : await getNextFileId(taskPath);
-
-      // 将编号保存到 README frontmatter 中（使用已生成的 fileId）
       await saveFileIdToReadme(
         dataPath,
         projectName,
         taskName,
         finalFileName,
-        idToSave
+        fileId
       );
+      console.log(`文件ID已保存: ${finalFileName} -> ${fileId}`);
     } catch (err) {
-      console.error("分配文件编号或保存到 README 失败:", err.message);
+      console.error(`保存文件ID失败: ${finalFileName}`, err);
+      // 这是关键错误，必须抛出
+      throw new Error(`保存文件ID失败: ${err.message}`);
     }
 
+    // 异步执行非关键操作：缩略图和标签
     setImmediate(() => {
       pregen缩略图(dataPath, projectName, taskName, finalFileName).catch(
         (err) => {
@@ -254,63 +292,68 @@ async function mergeChunks(dataPath, uploadInfo) {
 async function getNextFileId(taskPath) {
   // 持久化到 taskPath/README.md 的 frontmatter.lastId 字段
   const readmePath = path.join(taskPath, "README.md");
-  try {
-    await fs.ensureDir(taskPath);
-    const matter = require("gray-matter");
 
-    let content = "";
-    let front = {};
+  const withLock = acquireReadmeLock(taskPath);
 
-    if (await fs.pathExists(readmePath)) {
-      const fileContent = await fs.readFile(readmePath, "utf8");
-      const parsed = matter(fileContent);
-      content = parsed.content || "";
-      front = parsed.data || {};
-    }
-
-    // 兼容已有项目：计算已存在的最大编号
-    let maxExisting = 9; // 目标：首次分配为 10
-
-    // 来自 front.fileIds 的编号
-    if (front.fileIds && typeof front.fileIds === "object") {
-      for (const v of Object.values(front.fileIds)) {
-        const n = parseInt(v, 10);
-        if (!isNaN(n) && n > maxExisting) maxExisting = n;
-      }
-    }
-
-    // 来自目录中文件名的编号（匹配尾部 _<number>）
+  return await withLock(async () => {
     try {
-      const files = await fs.readdir(taskPath);
-      for (const f of files) {
-        // 跳过 README.md
-        if (f === "README.md") continue;
-        const m = f.match(/_(\d+)(?:\.[^.]+)?$/);
-        if (m) {
-          const n = parseInt(m[1], 10);
+      await fs.ensureDir(taskPath);
+      const matter = require("gray-matter");
+
+      let content = "";
+      let front = {};
+
+      if (await fs.pathExists(readmePath)) {
+        const fileContent = await fs.readFile(readmePath, "utf8");
+        const parsed = matter(fileContent);
+        content = parsed.content || "";
+        front = parsed.data || {};
+      }
+
+      // 兼容已有项目：计算已存在的最大编号
+      let maxExisting = 9; // 目标：首次分配为 10
+
+      // 来自 front.fileIds 的编号
+      if (front.fileIds && typeof front.fileIds === "object") {
+        for (const v of Object.values(front.fileIds)) {
+          const n = parseInt(v, 10);
           if (!isNaN(n) && n > maxExisting) maxExisting = n;
         }
       }
-    } catch (e) {
-      // 忽略读取目录错误
+
+      // 来自目录中文件名的编号（匹配尾部 _<number>）
+      try {
+        const files = await fs.readdir(taskPath);
+        for (const f of files) {
+          // 跳过 README.md
+          if (f === "README.md") continue;
+          const m = f.match(/_(\d+)(?:\.[^.]+)?$/);
+          if (m) {
+            const n = parseInt(m[1], 10);
+            if (!isNaN(n) && n > maxExisting) maxExisting = n;
+          }
+        }
+      } catch (e) {
+        // 忽略读取目录错误
+      }
+
+      // 确保 front.lastId 至少为 maxExisting（这样不会回退）
+      if (typeof front.lastId !== "number" || front.lastId < maxExisting) {
+        front.lastId = maxExisting;
+      }
+
+      // 递增并持久化，返回新值（首次返回为 maxExisting+1，默认首次为 10）
+      front.lastId = (front.lastId || 0) + 1;
+
+      const newContent = matter.stringify(content, front);
+      await fs.writeFile(readmePath, newContent, "utf8");
+
+      return front.lastId;
+    } catch (err) {
+      console.error("getNextFileId 错误:", err.message);
+      throw err;
     }
-
-    // 确保 front.lastId 至少为 maxExisting（这样不会回退）
-    if (typeof front.lastId !== "number" || front.lastId < maxExisting) {
-      front.lastId = maxExisting;
-    }
-
-    // 递增并持久化，返回新值（首次返回为 maxExisting+1，默认首次为 10）
-    front.lastId = (front.lastId || 0) + 1;
-
-    const newContent = matter.stringify(content, front);
-    await fs.writeFile(readmePath, newContent, "utf8");
-
-    return front.lastId;
-  } catch (err) {
-    console.error("getNextFileId 错误:", err.message);
-    throw err;
-  }
+  });
 }
 
 // 将文件编号写入 README.md 的 frontmatter（字段名为 fileIds）
@@ -324,35 +367,39 @@ async function saveFileIdToReadme(
   const taskPath = path.join(dataPath, projectName, taskName);
   const readmePath = path.join(taskPath, "README.md");
 
-  try {
-    const matter = require("gray-matter");
-    let content = "";
-    let frontmatter = {};
+  const withLock = acquireReadmeLock(taskPath);
 
-    if (await fs.pathExists(readmePath)) {
-      const fileContent = await fs.readFile(readmePath, "utf8");
-      const parsed = matter(fileContent);
-      content = parsed.content;
-      frontmatter = parsed.data || {};
+  return await withLock(async () => {
+    try {
+      const matter = require("gray-matter");
+      let content = "";
+      let frontmatter = {};
+
+      if (await fs.pathExists(readmePath)) {
+        const fileContent = await fs.readFile(readmePath, "utf8");
+        const parsed = matter(fileContent);
+        content = parsed.content;
+        frontmatter = parsed.data || {};
+      }
+
+      if (!frontmatter.fileIds) frontmatter.fileIds = {};
+
+      frontmatter.fileIds[fileName] = id;
+
+      // 如果没有默认文件字段，则将第一个上传的文件设为默认
+      if (!frontmatter.defaultFile) {
+        frontmatter.defaultFile = fileName;
+      }
+
+      const newContent = matter.stringify(content, frontmatter);
+      await fs.writeFile(readmePath, newContent, "utf8");
+
+      console.log(`已为文件 ${fileName} 分配编号: ${id}`);
+    } catch (error) {
+      console.error("保存文件编号失败:", error.message);
+      throw error;
     }
-
-    if (!frontmatter.fileIds) frontmatter.fileIds = {};
-
-    frontmatter.fileIds[fileName] = id;
-
-    // 如果没有默认文件字段，则将第一个上传的文件设为默认
-    if (!frontmatter.defaultFile) {
-      frontmatter.defaultFile = fileName;
-    }
-
-    const newContent = matter.stringify(content, frontmatter);
-    await fs.writeFile(readmePath, newContent, "utf8");
-
-    console.log(`已为文件 ${fileName} 分配编号: ${id}`);
-  } catch (error) {
-    console.error("保存文件编号失败:", error.message);
-    throw error;
-  }
+  });
 }
 
 // 预生成缩略图的辅助函数
@@ -521,35 +568,39 @@ async function saveFileTagsToReadme(
   const taskPath = path.join(dataPath, projectName, taskName);
   const readmePath = path.join(taskPath, "README.md");
 
-  try {
-    const matter = require("gray-matter");
-    let content = "";
-    let frontmatter = {};
+  const withLock = acquireReadmeLock(taskPath);
 
-    if (await fs.pathExists(readmePath)) {
-      const fileContent = await fs.readFile(readmePath, "utf8");
-      const parsed = matter(fileContent);
-      content = parsed.content;
-      frontmatter = parsed.data;
+  return await withLock(async () => {
+    try {
+      const matter = require("gray-matter");
+      let content = "";
+      let frontmatter = {};
+
+      if (await fs.pathExists(readmePath)) {
+        const fileContent = await fs.readFile(readmePath, "utf8");
+        const parsed = matter(fileContent);
+        content = parsed.content;
+        frontmatter = parsed.data;
+      }
+
+      // 初始化fileTags对象
+      if (!frontmatter.fileTags) {
+        frontmatter.fileTags = {};
+      }
+
+      // 保存标签
+      frontmatter.fileTags[fileName] = tags;
+
+      // 重新组合README内容
+      const newContent = matter.stringify(content, frontmatter);
+      await fs.writeFile(readmePath, newContent, "utf8");
+
+      console.log(`已保存文件 ${fileName} 的标签: ${tags}`);
+    } catch (error) {
+      console.error("保存文件标签失败:", error);
+      throw error;
     }
-
-    // 初始化fileTags对象
-    if (!frontmatter.fileTags) {
-      frontmatter.fileTags = {};
-    }
-
-    // 保存标签
-    frontmatter.fileTags[fileName] = tags;
-
-    // 重新组合README内容
-    const newContent = matter.stringify(content, frontmatter);
-    await fs.writeFile(readmePath, newContent, "utf8");
-
-    console.log(`已保存文件 ${fileName} 的标签: ${tags}`);
-  } catch (error) {
-    console.error("保存文件标签失败:", error);
-    throw error;
-  }
+  });
 }
 
 module.exports = router;

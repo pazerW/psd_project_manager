@@ -471,13 +471,6 @@
               <p class="help-text">⚠️ 项目未配置标签，请先在项目详情页配置标签</p>
             </div>
             
-            <div v-if="uploading" class="progress-bar">
-              <div class="progress-fill" :style="{ width: (aggregateProgress() + '%') }"></div>
-            </div>
-            <p v-if="uploading" class="progress-text">
-              上传中... {{ Math.round(aggregateProgress()) }}%
-            </p>
-            
             <div class="upload-actions">
               <button 
                 v-if="uploading" 
@@ -901,6 +894,8 @@ export default {
     async startUploadMultiple() {
       if (!this.selectedFiles || this.selectedFiles.length === 0) return
 
+      console.log(`开始上传 ${this.selectedFiles.length} 个文件...`)
+      
       this.uploading = true
       this.uploadProgressMap = {}
       this.uploadIds = []
@@ -918,11 +913,14 @@ export default {
           setTimeout(async () => {
             try {
               this.uploadStatusMap[file.name] = 'uploading'
+              console.log(`[${index + 1}/${this.selectedFiles.length}] 开始上传: ${file.name}`)
               await this.uploadFileInChunks(file)
               this.uploadStatusMap[file.name] = 'success'
+              console.log(`[${index + 1}/${this.selectedFiles.length}] 完成: ${file.name}`)
               resolve(file.name)
             } catch (err) {
               this.uploadStatusMap[file.name] = 'error'
+              console.error(`[${index + 1}/${this.selectedFiles.length}] 失败: ${file.name}`, err)
               reject({ fileName: file.name, error: err })
             }
           }, index * 10)
@@ -930,22 +928,26 @@ export default {
       )
 
       try {
+        // 等待所有文件上传完成（无论成功还是失败）
+        console.log('等待所有文件上传完成...')
         const results = await Promise.allSettled(uploads)
         const succeeded = results.filter(r => r.status === 'fulfilled')
         const failed = results.filter(r => r.status === 'rejected')
         
-        console.log(`上传完成: 成功 ${succeeded.length}/${this.selectedFiles.length} 个文件`)
+        console.log(`所有文件上传完成！成功: ${succeeded.length}, 失败: ${failed.length}`)
         
         if (failed.length > 0) {
           console.error(`${failed.length} 个文件上传失败:`, failed.map(f => f.reason))
-          const msg = `上传完成：\n成功 ${succeeded.length} 个\n失败 ${failed.length} 个\n\n失败的文件：\n${failed.map(f => f.reason?.fileName || '未知文件').join('\n')}`
-          alert(msg)
+          const failedFileNames = failed.map(f => f.reason?.fileName || '未知文件').join('\n')
+          alert(`上传完成！\n\n成功: ${succeeded.length} 个\n失败: ${failed.length} 个\n\n失败的文件：\n${failedFileNames}`)
         } else {
           console.log('所有文件上传成功！')
         }
         
-        // 刷新文件列表
+        // 重要：只在所有文件处理完成后才刷新页面
+        console.log('开始刷新文件列表...')
         await this.loadTaskDetail()
+        console.log('文件列表刷新完成')
         
         // 如果所有文件都成功，自动关闭对话框；否则保持打开让用户查看状态
         if (failed.length === 0) {
@@ -954,7 +956,7 @@ export default {
           this.uploading = false
         }
       } catch (err) {
-        console.error('One or more uploads failed:', err)
+        console.error('上传过程中出错:', err)
         alert('上传失败：' + (err.message || '未知错误'))
         this.uploading = false
       }
