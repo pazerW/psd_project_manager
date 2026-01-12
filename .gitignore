@@ -38,3 +38,5 @@ backend/public/
 docker_compose_local.yml
 /logs
 *.png
+*.sketch
+*.pdf

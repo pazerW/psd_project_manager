@@ -81,7 +81,7 @@
       <!-- PSD 文件区域 -->
       <div class="psd-section card">
         <div class="aera_title">
-          <h3>设计文件 ({{ psdFiles.length }})</h3>
+          <h3>任务文件 ({{ psdFiles.length }})</h3>
           <button class="btn btn-primary" @click="showUpload = true">
             上传文件
           </button>
@@ -146,6 +146,7 @@
               </div>
               <div class="psd-thumbnail">
                   <img 
+                    v-if="file.thumbnailUrl"
                     :src="getDownloadUrl(file.thumbnailUrl)" 
                 :alt="file.name"
                 @error="handleImageError($event, file.name)"
@@ -153,6 +154,9 @@
                 @click="openLightboxByName(file.name)"
                 :key="file.thumbnailUrl"
               />
+              <div v-else class="file-icon" @click="downloadFile(file)">
+                <span class="icon-text">{{ getFileIconText(file.name) }}</span>
+              </div>
               <div :class="['file-type-badge', isRedFile(file.name) ? 'badge-red' : 'psd-badge']">{{ getFileType(file.name) }}</div>
             </div>
             <div class="psd-info">
@@ -284,6 +288,7 @@
                       </div>
                   <div class="psd-thumbnail">
                   <img 
+                    v-if="file.thumbnailUrl"
                     :src="getDownloadUrl(file.thumbnailUrl)" 
                     :alt="file.name"
                     @error="handleImageError($event, file.name)"
@@ -291,6 +296,9 @@
                     @click="openLightboxByName(file.name)"
                     :key="file.thumbnailUrl"
                   />
+                  <div v-else class="file-icon" @click="downloadFile(file)">
+                    <span class="icon-text">{{ getFileIconText(file.name) }}</span>
+                  </div>
                   <div :class="['file-type-badge', isRedFile(file.name) ? 'badge-red' : 'psd-badge']">{{ getFileType(file.name) }}</div>
                 </div>
                   <div class="psd-info">
@@ -421,13 +429,13 @@
             type="file" 
             ref="fileInput" 
             @change="handleFileSelect" 
-            accept=".psd,.ai,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.tiff,.tif"
+            accept=".psd,.ai,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.tiff,.tif,.sketch,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar,.7z"
             multiple
             style="display: none"
           />
           <div v-if="selectedFiles.length === 0" class="upload-prompt" @click="$refs.fileInput.click()">
-            <p>点击选择或拖拽设计文件到此处（支持多选）</p>
-            <p class="upload-help">支持 PSD、AI、图片等文件类型的大文件分片上传</p>
+            <p>点击选择或拖拽文件到此处（支持多选）</p>
+            <p class="upload-help">支持 PSD、AI、Sketch、图片、PDF、Word、Excel、压缩包等文件类型的大文件分片上传</p>
           </div>
           
           <div v-else class="upload-progress">
@@ -1211,11 +1219,17 @@ export default {
     isValidFileType(fileName) {
       const validExtensions = [
         '.psd',           // Photoshop
-        '.ai',            // Illustrator  
+        '.ai',            // Illustrator
+        '.sketch',        // Sketch
         '.jpg', '.jpeg',  // 图片格式
         '.png', '.gif', '.bmp', 
         '.webp', '.svg',
-        '.tiff', '.tif'
+        '.tiff', '.tif',
+        '.pdf',           // PDF文档
+        '.doc', '.docx',  // Word文档
+        '.xls', '.xlsx',  // Excel表格
+        '.txt',           // 文本文件
+        '.zip', '.rar', '.7z'  // 压缩文件
       ]
       const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'))
       return validExtensions.includes(ext)
@@ -1225,10 +1239,34 @@ export default {
     getFileType(fileName) {
       const ext = fileName.toLowerCase().substring(fileName.lastIndexOf('.'))
       if (ext === '.psd') return 'PSD'
-      if (ext === '.ai') return 'AI'  
+      if (ext === '.ai') return 'AI'
+      if (ext === '.sketch') return 'SKETCH'
       if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'].includes(ext)) return 'IMG'
-      if (ext === '.svg') return 'sSVG'
-      return 'Other'
+      if (ext === '.svg') return 'SVG'
+      if (ext === '.txt') return 'TXT'
+      if (['.doc', '.docx'].includes(ext)) return 'DOC'
+      if (['.xls', '.xlsx'].includes(ext)) return 'XLS'
+      if (ext === '.pdf') return 'PDF'
+      if (['.zip', '.rar', '.7z'].includes(ext)) return 'ZIP'
+      if (['.mp4', '.mov', '.avi'].includes(ext)) return 'VID'
+      if (['.mp3', '.wav'].includes(ext)) return 'AUD'
+      return ext.substring(1).toUpperCase() || 'FILE'
+    },
+
+    // 获取文件图标文本（用于没有缩略图的文件）
+    getFileIconText(fileName) {
+      const type = this.getFileType(fileName)
+      const iconMap = {
+        'SKETCH': '💎',
+        'TXT': '📝',
+        'DOC': '📃',
+        'XLS': '📊',
+        'PDF': '📕',
+        'ZIP': '📦',
+        'VID': '🎬',
+        'AUD': '🎵'
+      }
+      return iconMap[type] || '📎'
     },
 
     // 是否使用红色徽章（PSD 或 AI）
@@ -1737,6 +1775,27 @@ export default {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+/* 文件图标样式（用于没有缩略图的文件） */
+.file-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.file-icon:hover {
+  transform: scale(1.05);
+}
+
+.file-icon .icon-text {
+  font-size: 4rem;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
 /* PSD 文件角标 */

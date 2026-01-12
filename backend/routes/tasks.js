@@ -153,6 +153,7 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
     const validExtensions = [
       ".psd",
       ".ai",
+      ".sketch",
       ".jpg",
       ".jpeg",
       ".png",
@@ -162,28 +163,53 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
       ".svg",
       ".tiff",
       ".tif",
+      ".pdf",
+      ".doc",
+      ".docx",
+      ".xls",
+      ".xlsx",
+      ".txt",
+      ".zip",
+      ".rar",
+      ".7z",
     ];
 
     for (const file of files) {
-      const ext = path.extname(file).toLowerCase();
-      if (validExtensions.includes(ext)) {
-        const filePath = path.join(taskPath, file);
-        const stats = await fs.stat(filePath);
-
-        designFiles.push({
-          name: file,
-          size: stats.size,
-          modified: stats.mtime,
-          type: getFileType(ext),
-          downloadUrl: `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
-            file
-          )}`,
-          thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
-            file
-          )}`,
-          tags: fileTags[file] || "", // 添加标签
-        });
+      // 跳过所有.md文件（包括README.md）
+      if (file.toLowerCase().endsWith(".md")) {
+        continue;
       }
+
+      // 跳过隐藏文件和目录
+      if (file.startsWith(".")) {
+        continue;
+      }
+
+      const filePath = path.join(taskPath, file);
+      const stats = await fs.stat(filePath);
+
+      // 跳过目录，只包含文件
+      if (stats.isDirectory()) {
+        continue;
+      }
+
+      const ext = path.extname(file).toLowerCase();
+      const isDesignFile = validExtensions.includes(ext);
+
+      designFiles.push({
+        name: file,
+        size: stats.size,
+        modified: stats.mtime,
+        type: getFileType(ext),
+        downloadUrl: `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
+          file
+        )}`,
+        thumbnailUrl: isDesignFile ? `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
+          file
+        )}` : null,
+        tags: fileTags[file] || "", // 添加标签
+        isDesignFile: isDesignFile, // 标记是否为设计文件
+      });
     }
 
     res.json(designFiles);
@@ -714,6 +740,7 @@ function getPsdDescriptionsFromReadme(readmeContent) {
 function getFileType(ext) {
   if (ext === ".psd") return "psd";
   if (ext === ".ai") return "ai";
+  if (ext === ".sketch") return "sketch";
   if (
     [
       ".jpg",
@@ -728,7 +755,14 @@ function getFileType(ext) {
   )
     return "image";
   if (ext === ".svg") return "svg";
-  return "other";
+  if (ext === ".txt") return "text";
+  if ([".doc", ".docx"].includes(ext)) return "document";
+  if ([".xls", ".xlsx"].includes(ext)) return "spreadsheet";
+  if (ext === ".pdf") return "pdf";
+  if ([".zip", ".rar", ".7z", ".tar", ".gz"].includes(ext)) return "archive";
+  if ([".mp4", ".mov", ".avi", ".mkv"].includes(ext)) return "video";
+  if ([".mp3", ".wav", ".flac"].includes(ext)) return "audio";
+  return ext.substring(1) || "file";
 }
 
 // 添加留言到任务README

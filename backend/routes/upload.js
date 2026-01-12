@@ -410,6 +410,7 @@ async function pregen缩略图(dataPath, projectName, taskName, fileName) {
   const supportedTypes = [
     ".psd",
     ".ai",
+    ".sketch",
     ".jpg",
     ".jpeg",
     ".png",
@@ -506,6 +507,10 @@ async function pregen缩略图(dataPath, projectName, taskName, fileName) {
         });
         magick.on("error", (error) => reject(error));
       });
+    } else if (fileExt === ".sketch") {
+      // Sketch文件暂不支持缩略图生成，跳过
+      console.log(`Sketch文件 ${fileName} 暂不支持缩略图生成`);
+      return;
     } else if (fileExt === ".svg") {
       await sharp(filePath)
         .resize(300, 300, { fit: "inside", withoutEnlargement: true })

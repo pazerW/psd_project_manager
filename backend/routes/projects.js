@@ -402,10 +402,12 @@ async function analyzeTask(taskPath, taskName) {
     }
 
     // 计算任务中存在的设计文件数量（包括 PSD/AI/图片 等常见格式）
+    // 同时计算所有文件总数（包括隐藏文件和MD文件，但不包括README.md和目录）
     const files = await fs.readdir(taskPath);
     const validExtensions = [
       ".psd",
       ".ai",
+      ".sketch",
       ".jpg",
       ".jpeg",
       ".png",
@@ -415,10 +417,51 @@ async function analyzeTask(taskPath, taskName) {
       ".svg",
       ".tiff",
       ".tif",
+      ".pdf",
+      ".doc",
+      ".docx",
+      ".xls",
+      ".xlsx",
+      ".txt",
+      ".zip",
+      ".rar",
+      ".7z",
     ];
-    psdFiles = files.filter((f) =>
-      validExtensions.includes(path.extname(f).toLowerCase())
-    ).length;
+    
+    let designFileCount = 0;
+    let totalFileCount = 0;
+    
+    for (const file of files) {
+      // 跳过所有.md文件（包括README.md）
+      if (file.toLowerCase().endsWith(".md")) {
+        continue;
+      }
+      
+      // 跳过以点开头的隐藏文件（在计数时）
+      if (file.startsWith(".")) {
+        continue;
+      }
+      
+      const filePath = path.join(taskPath, file);
+      const stats = await fs.stat(filePath);
+      
+      // 跳过目录
+      if (stats.isDirectory()) {
+        continue;
+      }
+      
+      // 计算总文件数（包括所有文件）
+      totalFileCount++;
+      
+      // 计算设计文件数（只包含特定扩展名）
+      const ext = path.extname(file).toLowerCase();
+      if (validExtensions.includes(ext)) {
+        designFileCount++;
+      }
+    }
+    
+    psdFiles = designFileCount;
+
   } catch (error) {
     console.error(`Error analyzing task ${taskName}:`, error);
   }
