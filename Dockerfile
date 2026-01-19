@@ -14,8 +14,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 
 # 安装依赖（使用国内镜像加速）
-RUN npm config set registry https://registry.npmmirror.com && \
-    npm install --verbose --frozen-lockfile
+RUN npm install --verbose --frozen-lockfile
 
 # 复制源代码
 COPY frontend/ ./
@@ -54,8 +53,7 @@ COPY package*.json ./
 COPY backend/package*.json ./backend/
 
 # 安装后端依赖
-RUN npm config set registry https://registry.npmmirror.com && \
-    npm ci --only=production --verbose && \
+RUN npm ci --only=production --verbose && \
     cd backend && npm ci --only=production --verbose && \
     cd .. && \
     npm cache clean --force && \
