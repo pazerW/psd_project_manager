@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sunsetglow/vue-pdf-viewer": "^0.3.72",
     "axios": "^1.6.0",
     "date-fns": "^2.30.0",
     "highlight.js": "^11.8.0",

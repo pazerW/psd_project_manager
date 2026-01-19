@@ -22,7 +22,7 @@ function acquireReadmeLock(taskPath) {
 
   readmeLocks.set(
     taskPath,
-    currentLock.then(() => newLock)
+    currentLock.then(() => newLock),
   );
 
   return async (fn) => {
@@ -124,11 +124,13 @@ router.post(
         uploadInfo.uploadedChunks.length === parseInt(totalChunks);
 
       if (allChunksUploaded) {
-        console.log(`所有分片已上传完成，开始合并文件: ${fileName} (uploadId: ${uploadId})`);
-        
+        console.log(
+          `所有分片已上传完成，开始合并文件: ${fileName} (uploadId: ${uploadId})`,
+        );
+
         // 合并分片（同步等待完成）
         await mergeChunks(req.dataPath, uploadInfo);
-        
+
         console.log(`文件合并和保存完成: ${fileName} (uploadId: ${uploadId})`);
 
         // 清理临时文件
@@ -156,7 +158,7 @@ router.post(
       });
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 );
 
 // 检查上传状态
@@ -245,7 +247,7 @@ async function mergeChunks(dataPath, uploadInfo) {
     const tags = uploadInfo.tags || "";
 
     console.log(`开始保存文件ID: ${finalFileName} -> ${fileId}`);
-    
+
     // 先保存文件ID，这是最重要的，必须同步完成
     try {
       await saveFileIdToReadme(
@@ -253,7 +255,7 @@ async function mergeChunks(dataPath, uploadInfo) {
         projectName,
         taskName,
         finalFileName,
-        fileId
+        fileId,
       );
       console.log(`文件ID已保存: ${finalFileName} -> ${fileId}`);
     } catch (err) {
@@ -267,7 +269,7 @@ async function mergeChunks(dataPath, uploadInfo) {
       pregen缩略图(dataPath, projectName, taskName, finalFileName).catch(
         (err) => {
           console.error("缩略图预生成失败:", err.message);
-        }
+        },
       );
       // 如果有标签，保存到README
       if (tags) {
@@ -276,7 +278,7 @@ async function mergeChunks(dataPath, uploadInfo) {
           projectName,
           taskName,
           finalFileName,
-          tags
+          tags,
         ).catch((err) => {
           console.error("保存标签失败:", err.message);
         });
@@ -362,7 +364,7 @@ async function saveFileIdToReadme(
   projectName,
   taskName,
   fileName,
-  id
+  id,
 ) {
   const taskPath = path.join(dataPath, projectName, taskName);
   const readmePath = path.join(taskPath, "README.md");
@@ -433,7 +435,7 @@ async function pregen缩略图(dataPath, projectName, taskName, fileName) {
     dataPath,
     ".thumbnails",
     projectName,
-    taskName
+    taskName,
   );
   await fs.ensureDir(thumbnailDir);
   const thumbnailPath = path.join(thumbnailDir, `${fileName}.webp`);
@@ -568,7 +570,7 @@ async function saveFileTagsToReadme(
   projectName,
   taskName,
   fileName,
-  tags
+  tags,
 ) {
   const taskPath = path.join(dataPath, projectName, taskName);
   const readmePath = path.join(taskPath, "README.md");

@@ -427,41 +427,40 @@ async function analyzeTask(taskPath, taskName) {
       ".rar",
       ".7z",
     ];
-    
+
     let designFileCount = 0;
     let totalFileCount = 0;
-    
+
     for (const file of files) {
       // 跳过所有.md文件（包括README.md）
       if (file.toLowerCase().endsWith(".md")) {
         continue;
       }
-      
+
       // 跳过以点开头的隐藏文件（在计数时）
       if (file.startsWith(".")) {
         continue;
       }
-      
+
       const filePath = path.join(taskPath, file);
       const stats = await fs.stat(filePath);
-      
+
       // 跳过目录
       if (stats.isDirectory()) {
         continue;
       }
-      
+
       // 计算总文件数（包括所有文件）
       totalFileCount++;
-      
+
       // 计算设计文件数（只包含特定扩展名）
       const ext = path.extname(file).toLowerCase();
       if (validExtensions.includes(ext)) {
         designFileCount++;
       }
     }
-    
-    psdFiles = designFileCount;
 
+    psdFiles = designFileCount;
   } catch (error) {
     console.error(`Error analyzing task ${taskName}:`, error);
   }

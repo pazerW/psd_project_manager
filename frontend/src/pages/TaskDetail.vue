@@ -55,7 +55,18 @@
         </div>
       </div>
     </div>
-
+    <!-- PDF查看器弹窗 -->
+    <div v-if="pdfViewerVisible" class="pdf-viewer-modal" @click.self="closePdfViewer">
+      <div class="pdf-viewer-dialog">
+        <div class="pdf-viewer-header">
+          <h3>{{ pdfCurrentFile?.name }}</h3>
+          <button class="btn-close" @click="closePdfViewer">✕</button>
+        </div>
+        <div class="pdf-viewer-content">
+          <div ref="pdfViewerContainer" class="pdf-container"></div>
+        </div>
+      </div>
+    </div>
     <div v-if="loading" class="loading">
       加载任务详情中...
     </div>
@@ -287,15 +298,15 @@
                         </template>
                       </div>
                   <div class="psd-thumbnail">
-                  <img 
-                    v-if="file.thumbnailUrl"
-                    :src="getDownloadUrl(file.thumbnailUrl)" 
-                    :alt="file.name"
-                    @error="handleImageError($event, file.name)"
-                    @load="handleImageLoad($event, file.name)"
-                    @click="openLightboxByName(file.name)"
-                    :key="file.thumbnailUrl"
-                  />
+                    <img 
+                      v-if="file.thumbnailUrl"
+                      :src="getDownloadUrl(file.thumbnailUrl)" 
+                      :alt="file.name"
+                      @error="handleImageError($event, file.name)"
+                      @load="handleImageLoad($event, file.name)"
+                      @click="handleFileClick(file, idx)"
+                      :key="file.thumbnailUrl"
+                    />
                   <div v-else class="file-icon" @click="downloadFile(file)">
                     <span class="icon-text">{{ getFileIconText(file.name) }}</span>
                   </div>
@@ -520,6 +531,10 @@ import { formatDistance } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 import networkMode from '../utils/networkMode'
 import CommentDialog from '../components/CommentDialog.vue'
+import { ref as vueRef, onMounted } from 'vue'
+import { initPdfView } from '@sunsetglow/vue-pdf-viewer'
+import '@sunsetglow/vue-pdf-viewer/dist/style.css'
+
 
 export default {
   name: 'TaskDetail',
@@ -577,7 +592,11 @@ export default {
       deleteTargetFile: '',
       
       // 留言
-      showComment: false
+      showComment: false,
+      // PDF 查看
+      pdfViewerVisible: false,
+      pdfViewerContainer: null,
+      pdfCurrentFile: null
     }
   },
   computed: {
@@ -726,6 +745,15 @@ export default {
     }
   },
   methods: {
+  // PDF 文件点击处理
+  handleFileClick(file, index) {
+    const fileExt = file.name.toLowerCase().split('.').pop()
+    if (fileExt === 'pdf') {
+      this.openPdfViewer(file)
+    } else {
+      this.openLightbox(index)
+    }
+  },
     // 进入AI工作台
     goToAIWorkbench() {
       this.$router.push({
@@ -1315,25 +1343,108 @@ export default {
     },
 
     // Lightbox methods
+    // 修改openLightbox方法
     openLightbox(idx) {
-      this.lightboxIndex = idx
-      this.lightboxVisible = true
-      this.zoomScale = 1
-      this.translateX = 0
-      this.translateY = 0
-      this.lastTranslateX = 0
-      this.lastTranslateY = 0
-      this.originX = null
-      this.originY = null
-      document.addEventListener('keydown', this._onKeydown)
-      document.body.style.overflow = 'hidden'
-    },
+      const file = this.psdFiles[idx]
+      const fileExt = file.name.toLowerCase().split('.').pop()
+      
+      // 如果是PDF文件，使用PDF查看器
+      if (fileExt === 'pdf') {
+        this.openPdfViewer(file)
+      } else {
+        // 现有图片查看逻辑
+        this.lightboxIndex = idx
+        this.lightboxVisible = true
+        this.zoomScale = 1
+        this.translateX = 0
+        this.translateY = 0
+        this.lastTranslateX = 0
+        this.lastTranslateY = 0
+        this.originX = null
+        this.originY = null
+        document.addEventListener('keydown', this._onKeydown)
+        document.body.style.overflow = 'hidden'
+      }
+    },  
 
     openLightboxByName(name) {
       const idx = (this.psdFiles || []).findIndex(f => f.name === name)
       if (idx !== -1) this.openLightbox(idx)
     },
+// 新增：打开PDF查看器
+openPdfViewer(file) {
+  this.pdfCurrentFile = file
+  this.pdfViewerVisible = true
+  document.body.style.overflow = 'hidden'
+  
+  // 下一个tick初始化PDF查看器
+  this.$nextTick(() => {
+    this.initPdfViewer()
+  })
+},
 
+// 新增：初始化PDF查看器
+async initPdfViewer() {
+  if (!this.pdfCurrentFile) return
+  
+  try {
+    // 创建或获取容器
+    let container = this.$refs.pdfViewerContainer
+    if (!container) {
+      container = document.createElement('div')
+      container.id = 'pdf-viewer-container'
+      container.style.cssText = 'width: 100%; height: 100%;'
+      document.querySelector('.pdf-viewer-modal .modal-content')?.appendChild(container)
+    }
+    
+    // 清空容器
+    container.innerHTML = ''
+    
+    // 获取PDF文件的下载URL
+    const pdfUrl = this.getDownloadUrl(this.pdfCurrentFile.downloadUrl)
+    
+    // 初始化PDF查看器
+    initPdfView(container, {
+      loadFileUrl: pdfUrl,
+      pdfPath: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js',
+      // 可选配置
+      enableDownload: true,
+      enablePrint: true,
+      enableZoom: true,
+      enableSearch: true,
+      enableOutline: true,
+      enableThumbnail: true,
+      enableFullscreen: true
+    })
+  } catch (error) {
+    console.error('初始化PDF查看器失败:', error)
+    alert('PDF加载失败：' + error.message)
+  }
+},
+
+// 修改closeLightbox方法
+closeLightbox() {
+  this.lightboxVisible = false
+  this.zoomScale = 1
+  document.removeEventListener('keydown', this._onKeydown)
+  document.body.style.overflow = ''
+  
+  // 同时关闭PDF查看器
+  this.closePdfViewer()
+},
+
+// 新增：关闭PDF查看器
+closePdfViewer() {
+  this.pdfViewerVisible = false
+  this.pdfCurrentFile = null
+  document.body.style.overflow = ''
+  
+  // 清理PDF查看器容器
+  const container = document.getElementById('pdf-viewer-container')
+  if (container) {
+    container.innerHTML = ''
+  }
+},
     closeLightbox() {
       this.lightboxVisible = false
       this.zoomScale = 1
@@ -2554,4 +2665,88 @@ export default {
   text-align: right;
 }
 
+
+/* PDF查看器样式 */
+.pdf-viewer-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2001; /* 比Lightbox更高 */
+}
+
+.pdf-viewer-dialog {
+  background: white;
+  border-radius: 8px;
+  width: 95%;
+  height: 95%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pdf-viewer-header {
+  padding: 1rem 1.5rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pdf-viewer-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #333;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0.25rem;
+}
+
+.btn-close:hover {
+  color: #333;
+}
+
+.pdf-viewer-content {
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.pdf-container {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+/* 确保PDF查看器组件样式正确 */
+:deep(.pdf-viewer) {
+  height: 100%;
+}
+
+:deep(.pdf-toolbar) {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.5rem;
+}
+
+:deep(.pdf-page) {
+  margin: 1rem auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
 </style>  

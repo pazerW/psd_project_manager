@@ -202,11 +202,13 @@ router.get("/:projectName/:taskName/files", async (req, res) => {
         modified: stats.mtime,
         type: getFileType(ext),
         downloadUrl: `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
-          file
+          file,
         )}`,
-        thumbnailUrl: isDesignFile ? `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
-          file
-        )}` : null,
+        thumbnailUrl: isDesignFile
+          ? `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
+              file,
+            )}`
+          : null,
         tags: fileTags[file] || "", // 添加标签
         isDesignFile: isDesignFile, // 标记是否为设计文件
       });
@@ -271,14 +273,14 @@ router.put(
         projectName,
         taskName,
         fileName,
-        description
+        description,
       );
 
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 );
 
 // 更新文件标签
@@ -308,14 +310,14 @@ router.put(
         projectName,
         taskName,
         fileName,
-        description
+        description,
       );
 
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 );
 
 // 更新任务的README.md
@@ -356,7 +358,7 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
   const requestId = Date.now().toString();
 
   console.log(
-    `[Status Update Start] ${projectName}/${taskName} -> ${status} [${requestId}]`
+    `[Status Update Start] ${projectName}/${taskName} -> ${status} [${requestId}]`,
   );
 
   try {
@@ -391,7 +393,7 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
           // 写入文件（原子替换：先写入临时文件，再重命名）
           const fullContent = matter.stringify(content, frontmatter);
           const tmpPath = `${readmePath}.tmp.${Date.now()}.${Math.floor(
-            Math.random() * 100000
+            Math.random() * 100000,
           )}`;
           await fs.writeFile(tmpPath, fullContent, "utf8");
 
@@ -407,7 +409,7 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
           } catch (err) {
             // 如果 fsync 不可用或失败，记录但继续（rename 仍能保证原子替换）
             console.warn(
-              `[Status Update] fsync failed for ${tmpPath}: ${err.message}`
+              `[Status Update] fsync failed for ${tmpPath}: ${err.message}`,
             );
           }
 
@@ -427,15 +429,15 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
 
           if (actualStatus !== status) {
             console.error(
-              `[Status Update Error] ${projectName}/${taskName} 验证失败 [${requestId}]: 期望=${status}, 实际=${actualStatus}`
+              `[Status Update Error] ${projectName}/${taskName} 验证失败 [${requestId}]: 期望=${status}, 实际=${actualStatus}`,
             );
             throw new Error(
-              `Status verification failed: expected ${status}, got ${actualStatus}`
+              `Status verification failed: expected ${status}, got ${actualStatus}`,
             );
           }
 
           console.log(
-            `[Status Update Success] ${projectName}/${taskName}: ${oldStatus} -> ${status} [${requestId}]`
+            `[Status Update Success] ${projectName}/${taskName}: ${oldStatus} -> ${status} [${requestId}]`,
           );
           return {
             success: true,
@@ -445,11 +447,11 @@ router.put("/:projectName/:taskName/status", async (req, res) => {
           };
         } catch (error) {
           console.error(
-            `[Status Update Error] ${projectName}/${taskName} [${requestId}]: ${error.message}`
+            `[Status Update Error] ${projectName}/${taskName} [${requestId}]: ${error.message}`,
           );
           throw error;
         }
-      })
+      }),
     ),
     taskUpdateLocks.get(lockKey));
 
@@ -533,7 +535,7 @@ router.post("/:projectName/:taskName/save-image", async (req, res) => {
         projectName,
         taskName,
         newFileName,
-        fileId
+        fileId,
       );
     } catch (e) {
       console.error("保存文件编号到 README 失败:", e.message);
@@ -543,7 +545,7 @@ router.post("/:projectName/:taskName/save-image", async (req, res) => {
     setImmediate(() => {
       try {
         pregen缩略图(req.dataPath, projectName, taskName, newFileName).catch(
-          (err) => console.error("预生成缩略图失败:", err.message)
+          (err) => console.error("预生成缩略图失败:", err.message),
         );
       } catch (e) {
         console.error("启动缩略图任务失败:", e.message);
@@ -552,7 +554,7 @@ router.post("/:projectName/:taskName/save-image", async (req, res) => {
 
     // 返回保存后的信息和下载链接
     const downloadUrl = `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
-      newFileName
+      newFileName,
     )}`;
     res.json({ success: true, filename: newFileName, downloadUrl });
   } catch (error) {
@@ -662,10 +664,10 @@ async function analyzeTaskDetails(taskPath, taskName, projectName) {
           modified: stats.mtime,
           type: getFileType(ext),
           downloadUrl: `/api/files/download/${projectName}/${taskName}/${encodeURIComponent(
-            file
+            file,
           )}`,
           thumbnailUrl: `/api/files/thumbnail/${projectName}/${taskName}/${encodeURIComponent(
-            file
+            file,
           )}`,
           description: psdDescriptions[file] || "",
           tags: fileTags[file] || "", // 添加标签
@@ -725,7 +727,7 @@ function getPsdDescriptionsFromReadme(readmeContent) {
 
     if (inPsdSection && line.startsWith("- **")) {
       const match = line.match(
-        /- \*\*(.+\.(psd|ai|jpg|jpeg|png|gif|bmp|webp|svg|tiff|tif))\*\*[：:] (.+)/
+        /- \*\*(.+\.(psd|ai|jpg|jpeg|png|gif|bmp|webp|svg|tiff|tif))\*\*[：:] (.+)/,
       );
       if (match) {
         descriptions[match[1]] = match[3];
@@ -797,7 +799,7 @@ router.post("/:projectName/:taskName/comment", async (req, res) => {
     // 广播数据变更事件
     if (req.app && req.app.locals && req.app.locals.broadcastDataChange) {
       req.app.locals.broadcastDataChange(
-        `${projectName}/${taskName}/README.md`
+        `${projectName}/${taskName}/README.md`,
       );
     }
 
@@ -844,7 +846,7 @@ router.post("/:projectName/:taskName/ai-log", async (req, res) => {
       logEntry += `**result**:\n\n\`\`\`json\n${JSON.stringify(
         logData.result,
         null,
-        2
+        2,
       )}\n\`\`\`\n\n`;
     }
 
@@ -1011,7 +1013,7 @@ router.put("/:projectName/:taskName/ai-log/:jobId", async (req, res) => {
         lines.splice(
           resultStartIndex,
           resultEndIndex - resultStartIndex,
-          ...resultLines
+          ...resultLines,
         );
       } else {
         // 在---之前插入结果

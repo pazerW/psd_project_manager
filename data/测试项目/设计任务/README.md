@@ -56,8 +56,9 @@ fileIds:
   测试项目_设计任务_68.png: 68
   测试项目_设计任务_1441.pdf: 1441
   测试项目_设计任务_1442.sketch: 1442
+  测试项目_设计任务_1443.pdf: 1443
 defaultFile: 测试项目_设计任务_10.psd
-lastId: 1442
+lastId: 1443
 fileDescriptions:
   测试项目_设计任务_3.psd: '131311'
 updatedAt: 1768050906141
